@@ -1,6 +1,9 @@
 package main
 
 import (
+
+
+	"math"
 	"sync"
 
 	"strconv"
@@ -141,24 +144,31 @@ func downloadTest(url string, fn string){
 
 func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	
-	r_avg := 0
-	g_avg:=0
-	b_avg:=0
-	count:=0
+	var r_sum float64 =0
+	var g_sum float64 =0
+	var b_sum float64 =0
+	var count float64 =0
 	
 	for i:=rect.Min.X; i<rect.Max.X;i++{
 		for j:=rect.Min.Y;j<rect.Max.Y;j++{
 			offset:=4*(j*img.Bounds().Max.X+i)
 			
+			
+			r_sum+= sRGBtoLinear(img.Pix[offset])
+			g_sum+= sRGBtoLinear(img.Pix[offset+1])
+			b_sum+= sRGBtoLinear(img.Pix[offset+2])
+			/*
 			r_avg+= int(img.Pix[offset])
 			b_avg+= int(img.Pix[offset+1])
 			g_avg+= int(img.Pix[offset+2])
+			*/
 			count++
 			
 		}
 	}
+	
 		
-	return color.RGBA{uint8(r_avg/count), uint8(g_avg/count), uint8(b_avg/count), 255}
+	return color.RGBA{lineartosRGB(r_sum/count), lineartosRGB(g_sum/count), lineartosRGB(b_sum/count), 255}
 	
 }
 
@@ -178,8 +188,8 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 			
 			c:=averageColor(img, image.Rect(i*xratio, j*yratio, (i+1)*xratio, (j+1)*yratio))
 			pixels[offset]=c.R
-			pixels[offset+1]=c.B
-			pixels[offset+2]=c.G
+			pixels[offset+1]=c.G
+			pixels[offset+2]=c.B
 			pixels[offset+3]=255
 			
 		}
@@ -248,9 +258,48 @@ func openDirectory(fn string) []*image.RGBA {
 	
 }
 
+func lineartosRGB(L float64) uint8 {
+	
+	//var L float64 = float64(l)/255
+	var S float64
+	var exp float64 = 1/2.4
+	
+	
+	if L > 0.0031308 {
+		S = 1.055*math.Pow(L,exp)-0.055
+		
+	} else {
+		S = L * 12.92
+	}
+	
+	return uint8(255*S)
+}
+
+func sRGBtoLinear(s uint8) float64 {
+	
+	var z float64 = float64(s)/255
+		
+	var L float64
+	
+	if z > 0.04045 {
+		L = math.Pow((z + 0.055)/(1.055), 2.4)
+	} else { 
+		L = z/12.92
+	}
+	
+	return L
+	
+	//uint8(255*L)
+	
+}
+
 func main(){
 	
-	flickrdownload()
+	z:=sRGBtoLinear(150)
+	zz:=lineartosRGB(z)
+	log.Println("conv : " + strconv.Itoa(int(zz)))
+	
+	//flickrdownload()
 	/*
 	jpgs := openDirectory("p")
 	
@@ -262,7 +311,7 @@ func main(){
 	}
 	*/
 	
-	reader, err := os.Open("front.png")
+	reader, err := os.Open("dl.png")
 	if err != nil {
 	    log.Fatal(err)
 	}
@@ -288,10 +337,11 @@ func main(){
 	
 	
 	
-	out:=downsample(gray, image.Rect(0,0,width/4,height/4))
+	out:=downsample(rgba, image.Rect(0,0,width/2,height/2))
 	
-	f,_ := os.OpenFile("small.png",os.O_CREATE, 0666)
+	f,_ := os.OpenFile("tevs.png",os.O_CREATE, 0666)
 	
+	log.Println("what")
 	png.Encode(f, out)
 
 	
