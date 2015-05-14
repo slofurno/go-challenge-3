@@ -1,8 +1,12 @@
 package main
 
 import (
+//	"reflect"
+	"fmt"
+	"strings"
+//	"fmt"
 
-
+  "io"
 	"math"
 	"sync"
 
@@ -11,7 +15,7 @@ import (
 	"net/http"
 	"image/png"
 	"encoding/json"
-	"io"
+	//"io"
 )
 
 import(
@@ -63,7 +67,7 @@ type FlickrResponse struct{
 
 func flickrdownload(){
 	
-	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=fish&page=1&format=json&per_page=200&content_type=1"
+	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=corvette&page=1&format=json&per_page=5&content_type=1"
 	res, err:= http.Get(uri)
 	contents, err := ioutil.ReadAll(res.Body)
 	rawlen := len(contents)
@@ -102,6 +106,9 @@ func flickrdownload(){
 				
 	}
 	wg.Wait()
+	
+	
+	//m = make(map[string]int)
 	/*
 	decoder:=json.NewDecoder(res.Body)
 	
@@ -119,13 +126,19 @@ func flickrdownload(){
 	
 }
 
+func convertToPNG(w io.Writer, r io.Reader) error {
+ img, _, err := image.Decode(r)
+ if err != nil {
+  return err
+ }
+ return png.Encode(w, img)
+}
+
 func downloadTest(url string, fn string){
 	
-	out, err := os.Create(fn)
-	if err!=nil {
-		log.Println(err)
-	}
-	defer out.Close()
+
+		
+		
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -133,11 +146,20 @@ func downloadTest(url string, fn string){
 		log.Println(err)
 	}
 	
+	out, err := os.Create(fn)
+	if err!=nil {
+		log.Println(err)
+	}
+	defer out.Close()
+		
 	n, err := io.Copy(out, res.Body)
 	if err!=nil {
 		log.Println(err)
 	}
 	log.Println("bytes downloaded : " + strconv.Itoa(int(n)))
+		
+	
+	
 }
 
 
@@ -149,14 +171,17 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	var b_sum float64 =0
 	var count float64 =0
 	
+	pixels := img.Pix
+	//fmt.Println("len",len(pixels))
+	
 	for i:=rect.Min.X; i<rect.Max.X;i++{
 		for j:=rect.Min.Y;j<rect.Max.Y;j++{
 			offset:=4*(j*img.Bounds().Max.X+i)
 			
 			
-			r_sum+= sRGBtoLinear(img.Pix[offset])
-			g_sum+= sRGBtoLinear(img.Pix[offset+1])
-			b_sum+= sRGBtoLinear(img.Pix[offset+2])
+			r_sum+= sRGBtoLinear(pixels[offset])
+			g_sum+= sRGBtoLinear(pixels[offset+1])
+			b_sum+= sRGBtoLinear(pixels[offset+2])
 			/*
 			r_avg+= int(img.Pix[offset])
 			b_avg+= int(img.Pix[offset+1])
@@ -187,6 +212,10 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 			offset:=4*(j*size.Max.X+i)
 			
 			c:=averageColor(img, image.Rect(i*xratio, j*yratio, (i+1)*xratio, (j+1)*yratio))
+			
+			//lum:= 0.299*float32(c.R) + 0.587*float32(c.G) + 0.114*float32(c.B)
+		//	fmt.Println("average lum : ", lum)
+			
 			pixels[offset]=c.R
 			pixels[offset+1]=c.G
 			pixels[offset+2]=c.B
@@ -196,6 +225,15 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	}
 	
 	return out
+	
+}
+
+func averageLum(img *image.RGBA, r image.Rectangle) float32 {
+	
+	c:=averageColor(img, r)	
+	lum:=0.299*float32(c.R) + 0.587*float32(c.G) + 0.114*float32(c.B)
+	
+	return lum
 	
 }
 
@@ -233,28 +271,187 @@ func createGrayscale(img *image.RGBA) *image.RGBA {
 	
 }
 
-func openDirectory(fn string) []*image.RGBA {
+func YCbCrToRGB(src *image.YCbCr) *image.RGBA {
+	
+	dst:=image.NewRGBA(src.Bounds())
+	pix:=dst.Pix
+	//YCbCrSubsampleRatio420blazeit
+	
+	fmt.Println("lens",len(src.Y), len(src.Cr),src.Bounds().String(),src.CStride, src.YStride, src.SubsampleRatio.String(), src.Opaque())
 	
 	
-	dir, _ := os.Open(fn)
-	fi, _ := dir.Readdir(20)
-	count:=len(fi)
-	
-	results := make([]*image.RGBA,count)
-	
-	for i:= 0; i<count;i++ {
-		reader, _ := os.Open(fn + "/" + fi[i].Name())
+	c:=0
+	for j:=0;j<src.Bounds().Max.Y;j++ {
 		
-		m, _, _ := image.Decode(reader)	
-		rgba, _ := m.(*image.RGBA)
-		reader.Close()
-		results[i] = rgba
+		for i:=0;i<src.Bounds().Max.X;i++ {
+			/*
+			
+			yi:=j*src.YStride+i
+			ci:=int((j*src.CStride+i)/2)
+						
+			y:=float32(src.Y[yi])
+			cb:=float32(src.Cb[ci])
+			cr:=float32(src.Cr[ci])	
+			
+			r:=y + 1.402*(cr-128)
+			g:=y -0.34414*(cb-128)-0.71414*(cr-128)
+			b:=y+1.772*(cb-128)
+			*/
+			r1,g1,b1,_ := src.At(i,j).RGBA()
+			
+			pix[4*c]=uint8(r1)
+			pix[4*c+1]=uint8(g1)
+			pix[4*c+2]=uint8(b1)
+			pix[4*c+3]=255
+			
+			c++
+			
+		}
 		
 	}
 	
-
+	return dst
 	
-	return results
+	
+}
+
+func copyPixels(src *image.RGBA, r image.Rectangle) *image.RGBA {
+	
+	dr := image.Rect(0,0,r.Max.X-r.Min.X, r.Max.Y-r.Min.Y)
+	
+	dst := image.NewRGBA(dr)
+	
+	srcwidth := src.Bounds().Max.X
+	//dstwidth := dst.Bounds().Max.X
+	
+	sp:=src.Pix
+	dp:=dst.Pix
+	
+	di:=0
+	
+	for j:= r.Min.Y ; j< r.Max.Y; j++ {
+		for i:= r.Min.X ; i < r.Max.X ; i++ {
+		
+			si := 4*(j * srcwidth + i)
+			
+			dp[di] = sp[si]
+			dp[di+1] = sp[si+1]
+			dp[di+2] = sp[si+2]
+			dp[di+3] = sp[si+3]
+			
+			di+=4
+		}
+		
+	}
+	
+	return dst;
+	
+}
+
+func makepngs(){
+	
+	dir, _ := os.Open("p")
+	fi, _ := dir.Readdir(200)
+	
+	for _,f:=range fi {
+		fn:= strings.Split(f.Name(), ".")
+		//fmt.Println(fn[0])
+		
+		reader, _ := os.Open("p" + "/" + f.Name())
+		f,_ := os.OpenFile("pngs/" + fn[0] + ".png",os.O_CREATE, 0666)
+		
+		
+		convertToPNG(f,reader)
+		
+		reader.Close()
+		f.Close()
+		
+	}
+	
+}
+
+
+
+func openDirectory(fn string) map[float32]*image.RGBA {
+	
+	
+	dir, _ := os.Open(fn)
+	fi, _ := dir.Readdir(200)
+	count:=len(fi)
+	fmt.Println("count",count)
+	
+	dict := make(map[float32]*image.RGBA)
+	
+	//results := make([]*image.RGBA,count)
+	
+	for i:= 0; i<count;i++ {
+		
+		reader, err := os.Open(fn + "/" + fi[i].Name())
+		if err != nil {
+		    log.Fatal(err)
+		}
+		//defer reader.Close()
+		
+		m, _, err := image.Decode(reader)
+		
+	
+		
+		//config, strp, err := image.DecodeConfig(reader)
+		
+		//fmt.Println(reflect.TypeOf(m))
+		
+
+		
+		
+		if err != nil {
+			log.Println(err)
+		}
+		
+		//.Convert().RGBA()
+		
+		var rgba *image.RGBA
+		
+		//fmt.Println(m.ColorModel())
+		
+		switch m.(type) {
+		case *image.RGBA: 
+			rgba=m.(*image.RGBA)
+		case *image.YCbCr:
+			rgba=YCbCrToRGB(m.(*image.YCbCr))
+		}
+		
+		lum := averageLum(rgba, rgba.Bounds())
+		dict[lum] = rgba
+		fmt.Println("lumie :", lum)
+		
+	 /*
+		rgba, ok := m.(*image.RGBA)
+		if ok {
+		    
+				lum := averageLum(rgba, rgba.Bounds())
+				fmt.Println("lum :", lum)
+		}
+		
+		ycbcr, ok := m.(*image.YCbCr)
+*/
+	
+		f,_ := os.OpenFile("out/"+fi[i].Name(),os.O_CREATE, 0666)
+		png.Encode(f, rgba)
+		
+		reader.Close()
+		
+		//reader.Close()
+		
+		//lum := averageLum(rgba, rgba.Bounds())
+				
+		//fmt.Println(lum)		
+		
+		
+		//results[i] = rgba
+		
+	}
+	
+	return dict
 	
 }
 
@@ -295,23 +492,37 @@ func sRGBtoLinear(s uint8) float64 {
 
 func main(){
 	
+	fmt.Println("imported and not used: \"fmt\"")
+	/*
 	z:=sRGBtoLinear(150)
 	zz:=lineartosRGB(z)
 	log.Println("conv : " + strconv.Itoa(int(zz)))
-	
-	//flickrdownload()
-	/*
-	jpgs := openDirectory("p")
-	
-	for ii,j := range jpgs {
-		
-		gj := createGrayscale(j)
-		gf,_ := os.OpenFile("g/" + strconv.Itoa(ii)+".png",os.O_CREATE, 0666)
-		png.Encode(gf, gj)
-	}
 	*/
 	
-	reader, err := os.Open("dl.png")
+	//flickrdownload() 
+  //makepngs()
+	
+	
+	
+	openDirectory("pngs")
+	
+	
+	
+	/*
+	for indx,_ := range pngs {
+		
+		fmt.Println(indx)
+		
+		//gj := createGrayscale(j)
+		//gf,_ := os.OpenFile("g/" + strconv.Itoa(ii)+".png",os.O_CREATE, 0666)
+		//png.Encode(gf, gj)
+		
+	}
+	*/
+
+	
+	
+	reader, err := os.Open("2.png")
 	if err != nil {
 	    log.Fatal(err)
 	}
@@ -327,19 +538,32 @@ func main(){
 	       return
 	}
 	
-  gray := createGrayscale(rgba)
+	height:=rgba.Bounds().Max.Y
+	width:=rgba.Bounds().Max.X
 	
-	height:=gray.Bounds().Max.Y
-	width:=gray.Bounds().Max.X
-	
-	
-	//rgba, _ := img.(*image.RGBA)
-	
-	
+	//fmt.Println("average lum",averageLum(rgba, rgba.Bounds()))
 	
 	out:=downsample(rgba, image.Rect(0,0,width/2,height/2))
 	
-	f,_ := os.OpenFile("tevs.png",os.O_CREATE, 0666)
+  gray := createGrayscale(out)
+	
+	_ = gray.Bounds()
+		/*
+	min := int(math.Min(float64(height),float64(width)))
+
+	clipX := (width - min)/2
+	clipY := (height-min)/2
+	
+	nr := image.Rect(clipX, clipY, width-clipX, height-clipY)
+	
+	cliptest := copyPixels(rgba, nr)
+	_ = cliptest.Bounds()
+	*/
+	
+	//rgba, _ := img.(*image.RGBA)
+	
+		
+	f,_ := os.OpenFile("small.png",os.O_CREATE, 0666)
 	
 	log.Println("what")
 	png.Encode(f, out)
