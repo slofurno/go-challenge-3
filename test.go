@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+//"image/draw"
 //	"reflect"
 	"fmt"
 	"strings"
@@ -67,7 +69,7 @@ type FlickrResponse struct{
 
 func flickrdownload(){
 	
-	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=corvette&page=1&format=json&per_page=5&content_type=1"
+	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=cat&page=1&format=json&per_page=100&content_type=1"
 	res, err:= http.Get(uri)
 	contents, err := ioutil.ReadAll(res.Body)
 	rawlen := len(contents)
@@ -102,7 +104,7 @@ func flickrdownload(){
 			defer wg.Done()
 			
 			downloadTest(url,filename)
-		}(p.downloadUrl(),"p/"+p.Id+".jpg")
+		}(p.downloadUrl(),"jpgs/"+p.Id+".jpg")
 				
 	}
 	wg.Wait()
@@ -370,12 +372,31 @@ func makepngs(){
 	
 }
 
+func convertImage(m image.Image) (*image.RGBA, error) {
+	
+	var rgba *image.RGBA
+		
+	switch m.(type) {
+	case *image.RGBA: 
+		rgba=m.(*image.RGBA)
+	case *image.YCbCr:
+		rgba=YCbCrToRGB(m.(*image.YCbCr))
+	default:
+		rgba=nil
+	}
+	
+	if rgba!=nil {
+		return rgba,nil
+	}else{
+		return nil,errors.New("tevs")
+	}
+	
+}
 
-
-func openDirectory(fn string) map[float32]*image.RGBA {
+func buildDictionary() map[float32]*image.RGBA {
 	
 	
-	dir, _ := os.Open(fn)
+	dir, _ := os.Open("jpgs")
 	fi, _ := dir.Readdir(200)
 	count:=len(fi)
 	fmt.Println("count",count)
@@ -386,7 +407,7 @@ func openDirectory(fn string) map[float32]*image.RGBA {
 	
 	for i:= 0; i<count;i++ {
 		
-		reader, err := os.Open(fn + "/" + fi[i].Name())
+		reader, err := os.Open("jpgs/" + fi[i].Name())
 		if err != nil {
 		    log.Fatal(err)
 		}
@@ -409,20 +430,14 @@ func openDirectory(fn string) map[float32]*image.RGBA {
 		
 		//.Convert().RGBA()
 		
-		var rgba *image.RGBA
-		
-		//fmt.Println(m.ColorModel())
-		
-		switch m.(type) {
-		case *image.RGBA: 
-			rgba=m.(*image.RGBA)
-		case *image.YCbCr:
-			rgba=YCbCrToRGB(m.(*image.YCbCr))
+		rgba,err := convertImage(m)
+		if err!=nil {
+			log.Println(err)
+		}else{
+			lum := averageLum(rgba, rgba.Bounds())
+			dict[lum] = rgba
+			fmt.Println("lumie :", lum)
 		}
-		
-		lum := averageLum(rgba, rgba.Bounds())
-		dict[lum] = rgba
-		fmt.Println("lumie :", lum)
 		
 	 /*
 		rgba, ok := m.(*image.RGBA)
@@ -500,11 +515,11 @@ func main(){
 	*/
 	
 	//flickrdownload() 
-  //makepngs()
+
 	
 	
 	
-	openDirectory("pngs")
+
 	
 	
 	
@@ -522,7 +537,7 @@ func main(){
 
 	
 	
-	reader, err := os.Open("2.png")
+	reader, err := os.Open("1.png")
 	if err != nil {
 	    log.Fatal(err)
 	}
@@ -538,16 +553,20 @@ func main(){
 	       return
 	}
 	
+	
+	
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
 	//fmt.Println("average lum",averageLum(rgba, rgba.Bounds()))
 	
-	out:=downsample(rgba, image.Rect(0,0,width/2,height/2))
+	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
 	
   gray := createGrayscale(out)
 	
 	_ = gray.Bounds()
+	
+	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
 		/*
 	min := int(math.Min(float64(height),float64(width)))
 
@@ -562,11 +581,53 @@ func main(){
 	
 	//rgba, _ := img.(*image.RGBA)
 	
+	
+	dict:=buildDictionary()
+	
+	fmt.Println("dict len",len(dict))
+	
+	for _,m := range dict {
 		
-	f,_ := os.OpenFile("small.png",os.O_CREATE, 0666)
+		fmt.Println(m.Bounds().Max.String())
+	}
+	
+	count:=0
+	
+	for j:=0;j<out.Bounds().Max.Y;j++ {
+		for i:=0;i<out.Bounds().Max.X;i++ {
+			count++
+			
+			tl:=out.RGBAAt(i,j).R
+			
+			maxlum:=0
+			var img *image.RGBA
+			
+			for l,m := range dict {
+				if int(l)>maxlum && uint8(l) < tl {
+					maxlum=int(l)
+					img=m
+				}
+				
+			}
+		 _=img
+			
+			
+			if img==nil {
+				fmt.Println("fck",tl)
+			}else{
+			dimg:= downsample(img,image.Rect(0,0,64,64))
+			_=dimg
+			//draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), dimg, dimg.Bounds().Min, draw.Src)
+			}
+			
+		}
+	}
+	
+	fmt.Println("count",count)
+	f,_ := os.OpenFile("mosaic.png",os.O_CREATE, 0666)
 	
 	log.Println("what")
-	png.Encode(f, out)
+	png.Encode(f, mosaic)
 
 	
 }
