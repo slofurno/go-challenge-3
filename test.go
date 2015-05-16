@@ -30,6 +30,12 @@ import(
 	
 )
 
+type MosImage struct {
+	
+	Image *image.RGBA
+	AvgColor *color.RGBA
+}
+
 
 type FlickrPhoto struct{
 	Id string `json:"id"`
@@ -69,7 +75,7 @@ type FlickrResponse struct{
 
 func flickrdownload(){
 	
-	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=kitten&page=1&format=json&per_page=700&content_type=1"
+	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=corvette&page=1&format=json&per_page=700&content_type=1"
 	res, err:= http.Get(uri)
 	contents, err := ioutil.ReadAll(res.Body)
 	rawlen := len(contents)
@@ -423,7 +429,7 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	
 }
 
-func buildDictionary() map[float32]*image.RGBA {
+func buildDictionary() []MosImage {//map[float32]*image.RGBA {
 	
 	
 	dir, _ := os.Open("jpgs")
@@ -431,73 +437,53 @@ func buildDictionary() map[float32]*image.RGBA {
 	count:=len(fi)
 	fmt.Println("count",count)
 	
-	dict := make(map[float32]*image.RGBA)
+	//dict := make(map[float32]*image.RGBA)
 	
-	//results := make([]*image.RGBA,count)
+	dic := make([]MosImage, 0, 1000)
 	
+
 	for i:= 0; i<count;i++ {
 		
 		reader, err := os.Open("jpgs/" + fi[i].Name())
 		if err != nil {
 		    log.Fatal(err)
 		}
-		//defer reader.Close()
+		
 		
 		m, _, err := image.Decode(reader)
 		
-	
-		
-		//config, strp, err := image.DecodeConfig(reader)
-		
-		//fmt.Println(reflect.TypeOf(m))
-		
 
-		
 		
 		if err != nil {
 			log.Println(err)
 		}
 		
-		//.Convert().RGBA()
 		
 		rgba,err := convertImage(m)
 		if err!=nil {
 			log.Println(err)
 		}else{
 			down:=downsample(rgba,image.Rect(0,0,64,64))
-			lum := averageLum(rgba, rgba.Bounds())
-			dict[lum] = down
+			//lum := averageLum(rgba, rgba.Bounds())
+			//dict[lum] = down
+			
+			mi:=&MosImage{}
+			mi.Image=down
+			ac:=averageColor(down,down.Bounds())
+			mi.AvgColor=&ac
+			
+			dic=append(dic,*mi)
+			
 			fmt.Println("lumie :", lum)
 		}
-		
-	 /*
-		rgba, ok := m.(*image.RGBA)
-		if ok {
-		    
-				lum := averageLum(rgba, rgba.Bounds())
-				fmt.Println("lum :", lum)
-		}
-		
-		ycbcr, ok := m.(*image.YCbCr)
-*/
-	
-		//f,_ := os.OpenFile("out/"+fi[i].Name(),os.O_CREATE, 0666)
-		//png.Encode(f, rgba)
-		
-		//reader.Close()
+		 
 		
 		reader.Close()
-		
-		//lum := averageLum(rgba, rgba.Bounds())
-				
-		//fmt.Println(lum)		
-		
-		
-		//results[i] = rgba
+
 		
 	}
 	
-	return dict
+	return dic
 	
 }
 
@@ -535,6 +521,25 @@ func sRGBtoLinear(s uint8) float64 {
 	//uint8(255*L)
 	
 }
+func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
+	
+	r:=float64(e1.R)-float64(e2.R)
+	g:=float64(e1.G)-float64(e2.G)
+	b:=float64(e1.B)-float64(e2.B)
+	
+	return math.Sqrt(r*r+g*g+b*b)
+	
+}
+
+func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
+	//http://www.compuphase.com/cmetric.htm
+  rmean := int64(( e1.R + e2.R ) / 2)
+  r := int64(e1.R - e2.R);
+  g := int64(e1.G - e2.G);
+  b := int64(e1.B - e2.B);
+	
+  return math.Sqrt(float64(  (((512+rmean)*r*r)>>8) + 4*g*g + (((767-rmean)*b*b)>>8)) );
+}
 
 func main(){
 	
@@ -570,7 +575,9 @@ func main(){
 	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
 	
 	
-	
+	//	f,_ := os.OpenFile("downsample.png",os.O_CREATE, 0666)
+	//png.Encode(f, out)
+
 
 
 
@@ -588,22 +595,33 @@ func main(){
 			
 			pixel := out.RGBAAt(i,j)
 			
-			rlum:=lum(&pixel)
+			//rlum:=lum(&pixel)
 			
-			var min float64 =255
+			var min float64 =999999
 			var img *image.RGBA
+			var mini int = -1
 			
-			for l,m := range dict {
+			for v := range dict {
 				
+				mi := dict[v]
+				dif:=colorDistance(mi.AvgColor, &pixel)
+				//fmt.Println(dif)
 				
+				if dif<min {
+					mini = v
+					min = dif
+				}
+				
+			}
+			img = dict[mini].Image
 			
+			/*
+			for l,m := range dict {	
 				dif:= math.Abs(float64(l)-float64(rlum))
 				if dif< min {
-					
 					min=dif
 					img=m
-				}
-								
+				}			
 			}
 							
 			if img==nil {
@@ -613,7 +631,10 @@ func main(){
 			
 			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
 			}
-			fmt.Println(count)
+			*/
+			
+			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
+			
 			
 		}
 	}
@@ -622,12 +643,9 @@ func main(){
 	
 	mf,_ := os.OpenFile("mosaic.png",os.O_CREATE, 0666)
 	png.Encode(mf, mosaic)
-		
 
-	gray := createGrayscale(mosaic)
 	
-	f,_ := os.OpenFile("gray.png",os.O_CREATE, 0666)
-	png.Encode(f, gray)
+
 
 
 }
