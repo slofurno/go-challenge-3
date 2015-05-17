@@ -96,7 +96,7 @@ func listen(w http.ResponseWriter, req *http.Request) {
 		
 		select{
 			case msg := <-mr.Progress:
-			fmt.Println("goto ne: ", msg)
+			
 			rw.Write([]byte("event: progress\n"))
 			rw.Write([]byte("data: " + msg+"\n\n"))
 			rw.Flush()

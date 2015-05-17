@@ -112,7 +112,7 @@ func flickrdownload(mr *MosRequest) []*image.Image {
 		
 	}
 	
-	fmt.Println("result len: ", len(results))
+	//fmt.Println("result len: ", len(results))
 	
 	return results[0:count];
 	
@@ -210,7 +210,7 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	xoffset:= int((img.Bounds().Max.X - size.Max.X*minratio)/2)
 	yoffset:= int((img.Bounds().Max.Y - size.Max.Y*minratio)/2)
 		
-	fmt.Println(xoffset,yoffset,minratio*size.Max.X,minratio*size.Max.Y)
+	//fmt.Println(xoffset,yoffset,minratio*size.Max.X,minratio*size.Max.Y)
 	
 	out := image.NewRGBA(size)
 	pixels := out.Pix
@@ -339,7 +339,7 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	
 	var rgba *image.RGBA
 	
-	fmt.Println(reflect.TypeOf(m).String())
+	//fmt.Println(reflect.TypeOf(m).String())
 		
 	switch m.(type) {
 	case *image.RGBA: 
@@ -384,7 +384,6 @@ func buildDictionary(images []*image.Image) []MosImage {//map[float32]*image.RGB
 			
 			dic=append(dic,*mi)
 			
-			fmt.Println("lumie :", lum)
 		}
 	
 	}
