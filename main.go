@@ -2,6 +2,8 @@
 package main
 
 import (
+
+	"math/rand"
 //	"io"
 	"sync"
 	"time"
@@ -22,9 +24,10 @@ import (
 type MosRequest struct {
 	
 	Image *image.RGBA
+	Key string
 	Id int
 	Terms []string
-	Progress chan int//= make(chan MosProgress, 10)
+	Progress chan string//= make(chan MosProgress, 10)
 	Result chan MosResult
 }
 
@@ -33,7 +36,7 @@ func NewMosRequest(image *image.RGBA, terms []string) *MosRequest {
 	r:=&MosRequest{}
 	r.Image=image
 	r.Terms=terms
-	r.Progress = make(chan int, 10)
+	r.Progress = make(chan string, 10)
 	r.Result = make(chan MosResult, 1)
 		
 	return r
@@ -46,7 +49,7 @@ type MosProgress struct {
 
 type MosResult struct {
 	
-	Mosaic *image.RGBA
+	Mosaic *bytes.Buffer
 }
 
 var MosRequests = make(map[string]*MosRequest)
@@ -70,14 +73,28 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	//w.Header().Set("Content-Type","text/event-stream")
 	//io.WriteString(w,"\n\n")
 	
-	var mr *MosRequest = MosRequests["test"]
+	var mr *MosRequest// = MosRequests[key]
+	var ok bool
+	
+	if mr, ok = MosRequests[key]; !ok {
+		fmt.Println("key not found")
+    return
+	}
 	
 	for {
 		
 		select{
-			case per := <-mr.Progress:
-			fmt.Println("goto ne: ", per)
-			rw.Write([]byte("data: " + strconv.Itoa(per)+"\n\n"))
+			case msg := <-mr.Progress:
+			fmt.Println("goto ne: ", msg)
+			rw.Write([]byte("data: " + msg+"\n\n"))
+			rw.Flush()
+			
+			case result := <-mr.Result:
+			fmt.Println("loks done")
+			buf:=result.Mosaic
+			rw.Write([]byte("data: "))
+			rw.Write(buf.Bytes())
+			rw.Write([]byte("\n\n"))
 			rw.Flush()
 			
 			//io.WriteString(w, "data: " + strconv.Itoa(per)+"\n\n")
@@ -94,12 +111,14 @@ func listen(w http.ResponseWriter, req *http.Request) {
 func hello(w http.ResponseWriter, req *http.Request) {
 	
 	mr := MosRequests["test"]
-	mr.Progress <- nextid
+	mr.Progress <- "hey"
 	nextid++
 	
 }
 
 func postimage(w http.ResponseWriter, req *http.Request) {
+	
+	
 	
 	buf, err := ioutil.ReadAll(req.Body)
 	buffer:=bytes.NewReader(buf)
@@ -117,15 +136,16 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 	terms:= qs["terms"]
 		
 	mr := NewMosRequest(rgba,terms)
-	
+	mr.Key=randomString(16)
 	//mr := MosRequest{Image:rgba, Id:nextid}
 	nextid++
 	
-	MosRequests["test"] = mr
+	MosRequests[mr.Key] = mr
 	
 	MosQueue <- mr
+	mr.Progress<-"mosaic queued"
 
-	
+	w.Write([]byte(mr.Key))
 	
 
 }
@@ -137,6 +157,87 @@ func saveImage(img *image.RGBA, fn string) {
 	png.Encode(f, img)
 	
 }
+
+var alpha = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+func randomString(l int ) string {
+	 
+    bytes := make([]byte, l)
+    for i:=0 ; i<l ; i++ {
+			bytes[i]= alpha[rand.Intn(len(alpha))]
+       // bytes[i] = byte(randInt(65,90))
+    }
+    return string(bytes)
+}
+
+func randInt(min int, max int) int {
+    return min + rand.Intn(max-min)
+		
+}
+
+func init(){
+	 rand.Seed( time.Now().UTC().UnixNano())
+}
+
+func buildMosaic(mr *MosRequest){
+
+	mr.Progress<-"starting mosaic"
+
+	rgba:=mr.Image
+	
+	height:=rgba.Bounds().Max.Y
+	width:=rgba.Bounds().Max.X
+	
+	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
+	
+	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
+	dict:=buildDictionary()
+
+	count:=0
+	
+	for j:=0;j<out.Bounds().Max.Y;j++ {
+		for i:=0;i<out.Bounds().Max.X;i++ {
+			count++
+			
+			pixel := out.RGBAAt(i,j)
+						
+			var min float64 =999999
+			var img *image.RGBA
+			var mini int = -1
+			
+			for v := range dict {
+				
+				mi := dict[v]
+				dif:=colorDistance(mi.AvgColor, &pixel)
+					
+				if dif<min {
+					mini = v
+					min = dif
+				}
+				
+			}
+			img = dict[mini].Image
+			
+					
+			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
+			
+			
+		}
+	}
+	
+//	var b bytes.Buffer
+	
+	
+	
+	mf,_ := os.OpenFile(mr.Key+".png",os.O_CREATE, 0666)
+	defer mf.Close()
+	png.Encode(mf, mosaic)
+	
+	mr.Progress<-"ready for download"
+	//mr.Result <- MosResult{Mosaic:&b}
+	
+}
+
 
 func main(){
 	
@@ -155,6 +256,8 @@ func main(){
 				fmt.Println("terms: ", t)
 				
 			}
+			
+			buildMosaic(mr)
 			
        fmt.Println("saving image with delay...")
        time.Sleep(time.Millisecond*1000)
