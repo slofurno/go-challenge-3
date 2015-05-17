@@ -91,6 +91,8 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	if mr, ok = MosRequests[key]; !ok {
 		fmt.Println("key not found")
     return
+	}else{
+		delete(MosRequests,key)
 	}
 	
 	for {
@@ -114,8 +116,8 @@ func listen(w http.ResponseWriter, req *http.Request) {
 			rw.Write([]byte(json))
 			rw.Write([]byte("\n\n"))
 			rw.Flush()
-			
-			//io.WriteString(w, "data: " + strconv.Itoa(per)+"\n\n")
+			return
+	
 			
 		}
 	
@@ -123,14 +125,6 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	}
 	
 	
-	
-}
-
-func hello(w http.ResponseWriter, req *http.Request) {
-	
-	mr := MosRequests["test"]
-	mr.Progress <- "hey"
-	nextid++
 	
 }
 
@@ -183,15 +177,10 @@ func randomString(l int ) string {
     bytes := make([]byte, l)
     for i:=0 ; i<l ; i++ {
 			bytes[i]= alpha[rand.Intn(len(alpha))]
-       // bytes[i] = byte(randInt(65,90))
     }
     return string(bytes)
 }
 
-func randInt(min int, max int) int {
-    return min + rand.Intn(max-min)
-		
-}
 
 func init(){
 	 rand.Seed( time.Now().UTC().UnixNano())
@@ -200,87 +189,65 @@ func init(){
 func buildMosaic(mr *MosRequest){
 
 	mr.Progress<-"starting mosaic"
-
 	rgba:=mr.Image
 	
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
 	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
-	
 	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
-	dict:=buildDictionary()
-
-	count:=0
+	
+	images:=flickrdownload(mr)	
+	mr.Progress<-"processing images"
+	dict:=buildDictionary(images)
+	mr.Progress<-"building mosaic"
 	
 	for j:=0;j<out.Bounds().Max.Y;j++ {
 		for i:=0;i<out.Bounds().Max.X;i++ {
-			count++
 			
 			pixel := out.RGBAAt(i,j)
 						
 			var min float64 =999999
 			var img *image.RGBA
-			var mini int = -1
+			var match int = -1
 			
 			for v := range dict {
 				
 				mi := dict[v]
+				//TODO:higher resolution color dif
 				dif:=colorDistance(mi.AvgColor, &pixel)
 					
 				if dif<min {
-					mini = v
+					match = v
 					min = dif
 				}
 				
 			}
-			img = dict[mini].Image
-			
-					
+			img = dict[match].Image
+							
 			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
-			
-			
+					
 		}
 	}
 	
 	var b bytes.Buffer
-	
-	
-	
-	//mf,_ := os.OpenFile(mr.Key+".png",os.O_CREATE, 0666)
-	//defer mf.Close()
 	png.Encode(&b, mosaic)
 	
-	mr.Progress<-"ready for download"
+	mr.Progress<-"downloading mosaic"
 	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
 	
 }
 
 
 func main(){
-	
-	
+		
   go func() {
-		fmt.Println("wtf?")
-			
+				
 	  for {
 	    var mr *MosRequest;
       select {
     	case mr = <-MosQueue:
-       
-			fmt.Println("terms")
-			for _,t := range mr.Terms {
-				
-				fmt.Println("terms: ", t)
-				
-			}
-			
-			buildMosaic(mr)
-			
-       fmt.Println("saving image with delay...")
-       time.Sleep(time.Millisecond*1000)
-			 saveImage(mr.Image, "uploaded" + strconv.Itoa(mr.Id)+".png")
-
+				buildMosaic(mr)
       }
 	  }
  	}()
@@ -288,115 +255,7 @@ func main(){
  
 	http.HandleFunc("/postimage", postimage)
 	http.HandleFunc("/listen", listen)
-	http.HandleFunc("/hello", hello)
 	http.Handle("/", http.FileServer(http.Dir("static")))
 	http.ListenAndServe(":555", nil)
 
-
-
-}
-
-func old(){
-	fmt.Println("imported and not used: \"fmt\"")
-
-	
-	//flickrdownload() 
-
-	
-	
-	reader, err := os.Open("bm.jpg")
-	if err != nil {
-	    log.Fatal(err)
-	}
-	defer reader.Close()
-	
-	m, _, err := image.Decode(reader)
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	rgba,err:=convertImage(m)
-	if err!=nil {
-		panic(err)
-	}
-	
-	
-	
-	height:=rgba.Bounds().Max.Y
-	width:=rgba.Bounds().Max.X
-
-	
-	
-	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
-	
-	
-	//	f,_ := os.OpenFile("downsample.png",os.O_CREATE, 0666)
-	//png.Encode(f, out)
-
-
- 
-
-
-	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
-	dict:=buildDictionary()
-
-	count:=0
-	
-	for j:=0;j<out.Bounds().Max.Y;j++ {
-		for i:=0;i<out.Bounds().Max.X;i++ {
-			count++
-			
-			//rlum:=out.RGBAAt(i,j).R
-			
-			pixel := out.RGBAAt(i,j)
-			
-			//rlum:=lum(&pixel)
-			
-			var min float64 =999999
-			var img *image.RGBA
-			var mini int = -1
-			
-			for v := range dict {
-				
-				mi := dict[v]
-				dif:=colorDistance(mi.AvgColor, &pixel)
-				//fmt.Println(dif)
-				
-				if dif<min {
-					mini = v
-					min = dif
-				}
-				
-			}
-			img = dict[mini].Image
-			
-			/*
-			for l,m := range dict {	
-				dif:= math.Abs(float64(l)-float64(rlum))
-				if dif< min {
-					min=dif
-					img=m
-				}			
-			}
-							
-			if img==nil {
-				fmt.Println("fck",rlum)
-			}else{
-			//dimg:= downsample(img,image.Rect(0,0,64,64))
-			
-			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
-			}
-			*/
-			
-			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
-			
-			
-		}
-	}
-	
-	
-	
-	mf,_ := os.OpenFile("mosaic.png",os.O_CREATE, 0666)
-	png.Encode(mf, mosaic)
-	
 }

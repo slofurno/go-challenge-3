@@ -4,10 +4,7 @@ import (
 	"errors"
 "reflect"
 	"fmt"
-	"strings"
-//	"fmt"
-
-  "io"
+	"io"
 	"math"
 	"sync"
 
@@ -16,7 +13,7 @@ import (
 	"net/http"
 	"image/png"
 	"encoding/json"
-	//"io"
+
 )
 
 import(
@@ -47,8 +44,7 @@ type FlickrPhoto struct{
 }
 
 func (p FlickrPhoto) downloadUrl() string {
-	
-	
+		
 	return "https://farm"+strconv.Itoa(p.Farm)+".staticflickr.com/"+p.Server+"/"+p.Id+"_"+p.Secret+".jpg"
 	
 }
@@ -70,68 +66,59 @@ type FlickrResponse struct{
 	
 }
 
-
-
-func flickrdownload(){
+func flickrdownload(mr *MosRequest) []*image.Image {
 	
-	uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text=corvette&page=1&format=json&per_page=700&content_type=1"
-	res, err:= http.Get(uri)
-	contents, err := ioutil.ReadAll(res.Body)
-	rawlen := len(contents)
+	results:=make([]*image.Image,2000,2000)
+	count:=0
 	
-	//flickr wraps our valid json response with jsonFlickrApi()
-	j:=contents[14:rawlen-1]
-	
-	s:=string(j)
-	
-	log.Println(contents)
-	log.Println(s)
-  log.Println("wtf")
-	
-	var f FlickrResponse
-	err=json.Unmarshal(j,&f)
-	
-	
-	if err!=nil{
-		log.Println(err)
-	}
-	
-	log.Println("stat: " + f.Stat)
-	plen := len(f.Photos.Photo)
-	log.Println("length : " + strconv.Itoa(plen))
-	
-	var wg sync.WaitGroup
-	
-	for _, p := range f.Photos.Photo{
+	for _,t := range mr.Terms {
 		
-		wg.Add(1)
-		go func(url string, filename string){
-			defer wg.Done()
+		fmt.Println("terms: ", t)
+		mr.Progress<-"searching for images: " + t
+		
+		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+t+ "&page=1&format=json&per_page=500&content_type=1"
+		res, err:= http.Get(uri)
+		contents, err := ioutil.ReadAll(res.Body)
+		rawlen := len(contents)
+		
+		j:=contents[14:rawlen-1]
+	
+		//s:=string(j)
+		
+		var f FlickrResponse
+		err=json.Unmarshal(j,&f)
+		
+		
+		if err!=nil{
+			log.Println(err)
+		}
+		//plen := len(f.Photos.Photo)
+		
+		var wg sync.WaitGroup
+	
+		for _, p := range f.Photos.Photo{
 			
-			downloadTest(url,filename)
-		}(p.downloadUrl(),"jpgs/"+p.Id+".jpg")
+			wg.Add(1)
+			go func(url string, filename string, indx int){
+				defer wg.Done()
 				
+				results[indx]=downloadanddecode(url,filename)
+			}(p.downloadUrl(),"jpgs/"+p.Id+".jpg", count)
+			
+			count++
+					
+		}
+		wg.Wait()
+		
+		
 	}
-	wg.Wait()
 	
+	fmt.Println("result len: ", len(results))
 	
-	//m = make(map[string]int)
-	/*
-	decoder:=json.NewDecoder(res.Body)
-	
-	var f FlickrResponse
-	err = decoder.Decode(&f)
-	
-	if err!=nil{
-		log.Println(err)
-	}
-	*/
-	
-	//err := json.Unmarshal(data, &app)
-	
-	
+	return results[0:count];
 	
 }
+
 
 func convertToPNG(w io.Writer, r io.Reader) error {
  img, _, err := image.Decode(r)
@@ -141,11 +128,23 @@ func convertToPNG(w io.Writer, r io.Reader) error {
  return png.Encode(w, img)
 }
 
-func downloadTest(url string, fn string){
-	
 
-		
-		
+func downloadanddecode(url string, fn string) *image.Image{
+	res, err := http.Get(url)
+	defer res.Body.Close()
+	
+	m, _, err := image.Decode(res.Body)
+	
+	if err!=nil {
+		log.Println(err)
+	}
+	
+	return &m;
+	
+}
+
+func downloadTest(url string, fn string){
+			
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -164,11 +163,8 @@ func downloadTest(url string, fn string){
 		log.Println(err)
 	}
 	log.Println("bytes downloaded : " + strconv.Itoa(int(n)))
-		
-	
-	
+			
 }
-
 
 
 func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
@@ -179,7 +175,6 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	var count float64 =0
 	
 	pixels := img.Pix
-	//fmt.Println("len",len(pixels))
 	
 	stride:=img.Bounds().Max.X
 	
@@ -191,33 +186,18 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 			r_sum+= sRGBtoLinear(pixels[offset])
 			g_sum+= sRGBtoLinear(pixels[offset+1])
 			b_sum+= sRGBtoLinear(pixels[offset+2])
-			/*
-			r_avg+= int(img.Pix[offset])
-			b_avg+= int(img.Pix[offset+1])
-			g_avg+= int(img.Pix[offset+2])
-			*/
+
 			count++
 			
 		}
 	}
-	
-		
+			
 	return color.RGBA{lineartosRGB(r_sum/count), lineartosRGB(g_sum/count), lineartosRGB(b_sum/count), 255}
 	
 }
 
-/*
-	for i:=xoffset; i<xmax;i++{
-		for j:=yoffset;j<ymax;j++{
-			*/
-
 func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	
-	//xoffset:=int((img.Bounds().Max.X%size.Max.X)/2)
-	//yoffset:=int((img.Bounds().Max.Y%size.Max.Y)/2)
-	
-//	xmax:=xoffset+size.Max.X
-	//ymax:=yoffset+size.Max.Y
   
 	xratio := int(img.Bounds().Max.X/size.Max.X)
 	yratio:=int(img.Bounds().Max.Y/size.Max.Y)
@@ -241,11 +221,8 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 			offset:=4*(j*size.Max.X+i)
 			
 			r:=image.Rect(i*minratio+xoffset, j*minratio+yoffset, (i+1)*minratio+xoffset, (j+1)*minratio+yoffset)
-						
+					
 			c:=averageColor(img, r)
-			
-			//lum:= 0.299*float32(c.R) + 0.587*float32(c.G) + 0.114*float32(c.B)
-		//	fmt.Println("average lum : ", lum)
 			
 			pixels[offset]=c.R
 			pixels[offset+1]=c.G
@@ -291,8 +268,6 @@ func createGrayscale(img *image.RGBA) *image.RGBA {
 			lum:=0.299*float32(r) + 0.587*float32(g) + 0.114*float32(b)
 			z:=uint8(int32(lum) >> 8)
 			
-			
-			//fmt.Println(z)
 			pixels[offset]=z
 			pixels[offset+1]=z
 			pixels[offset+2]=z
@@ -300,38 +275,19 @@ func createGrayscale(img *image.RGBA) *image.RGBA {
 			
 		}
 		
-	}
-	
-	return gray
-	
+	}	
+	return gray	
 }
 
 func YCbCrToRGB(src *image.YCbCr) *image.RGBA {
 	
 	dst:=image.NewRGBA(src.Bounds())
 	pix:=dst.Pix
-	//YCbCrSubsampleRatio420blazeit
-	
-	fmt.Println("lens",len(src.Y), len(src.Cr),src.Bounds().String(),src.CStride, src.YStride, src.SubsampleRatio.String(), src.Opaque())
-	
-	
+
 	c:=0
-	for j:=0;j<src.Bounds().Max.Y;j++ {
-		
+	for j:=0;j<src.Bounds().Max.Y;j++ {		
 		for i:=0;i<src.Bounds().Max.X;i++ {
-			/*
-			
-			yi:=j*src.YStride+i
-			ci:=int((j*src.CStride+i)/2)
-						
-			y:=float32(src.Y[yi])
-			cb:=float32(src.Cb[ci])
-			cr:=float32(src.Cr[ci])	
-			
-			r:=y + 1.402*(cr-128)
-			g:=y -0.34414*(cb-128)-0.71414*(cr-128)
-			b:=y+1.772*(cb-128)
-			*/
+
 			r1,g1,b1,_ := src.At(i,j).RGBA()
 			
 			pix[4*c]=uint8(r1)
@@ -341,13 +297,9 @@ func YCbCrToRGB(src *image.YCbCr) *image.RGBA {
 			
 			c++
 			
-		}
-		
-	}
-	
+		}		
+	}	
 	return dst
-	
-	
 }
 
 func copyPixels(src *image.RGBA, r image.Rectangle) *image.RGBA {
@@ -383,27 +335,6 @@ func copyPixels(src *image.RGBA, r image.Rectangle) *image.RGBA {
 	
 }
 
-func makepngs(){
-	
-	dir, _ := os.Open("p")
-	fi, _ := dir.Readdir(200)
-	
-	for _,f:=range fi {
-		fn:= strings.Split(f.Name(), ".")
-		//fmt.Println(fn[0])
-		
-		reader, _ := os.Open("p" + "/" + f.Name())
-		f,_ := os.OpenFile("pngs/" + fn[0] + ".png",os.O_CREATE, 0666)
-		
-		
-		convertToPNG(f,reader)
-		
-		reader.Close()
-		f.Close()
-		
-	}
-	
-}
 
 func convertImage(m image.Image) (*image.RGBA, error) {
 	
@@ -428,37 +359,18 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	
 }
 
-func buildDictionary() []MosImage {//map[float32]*image.RGBA {
+func buildDictionary(images []*image.Image) []MosImage {//map[float32]*image.RGBA {
 	
+	count:=len(images)
 	
-	dir, _ := os.Open("jpgs")
-	fi, _ := dir.Readdir(200)
-	count:=len(fi)
-	fmt.Println("count",count)
-	
-	//dict := make(map[float32]*image.RGBA)
-	
-	dic := make([]MosImage, 0, 1000)
+	dic := make([]MosImage, 0, count)
 	
 
 	for i:= 0; i<count;i++ {
-		
-		reader, err := os.Open("jpgs/" + fi[i].Name())
-		if err != nil {
-		    log.Fatal(err)
-		}
-		
-		
-		m, _, err := image.Decode(reader)
-		
-
-		
-		if err != nil {
-			log.Println(err)
-		}
-		
-		
-		rgba,err := convertImage(m)
+	
+		m:=images[i]
+				
+		rgba,err := convertImage(*m)
 		if err!=nil {
 			log.Println(err)
 		}else{
@@ -475,23 +387,18 @@ func buildDictionary() []MosImage {//map[float32]*image.RGBA {
 			
 			fmt.Println("lumie :", lum)
 		}
-		 
-		
-		reader.Close()
-
-		
+	
 	}
 	
 	return dic
 	
 }
 
+
 func lineartosRGB(L float64) uint8 {
 	
-	//var L float64 = float64(l)/255
 	var S float64
 	var exp float64 = 1/2.4
-	
 	
 	if L > 0.0031308 {
 		S = 1.055*math.Pow(L,exp)-0.055
@@ -516,9 +423,6 @@ func sRGBtoLinear(s uint8) float64 {
 	}
 	
 	return L
-	
-	//uint8(255*L)
-	
 }
 func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	

@@ -7,12 +7,48 @@
   </head>
   <body>
 
-    <input type="file" id="input" onchange="handleFiles(this.files)">
+ <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"></canvas> 
+ <br>
 
-    <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;"></canvas> 
+  <div style="background-color:ghostwhite;display:inline-block">
+    <input type="file" id="imageinput"><br>
+   
+    <input type="button" role="button" value="submit" onclick="handleFiles()"><br>
+    
+</div>
+ <div style="background-color:ghostwhite;display:inline-block">
+ <input class="tagname" type="text" placeholder="cat"><br>
+ <input class="tagname" type="text" placeholder="corvette"><br>
+ <input class="tagname" type="text" placeholder="mountain"><br>
+</div>
+<br>
+<div id="status">Select an image and enter up to 3 tile tags</div>
 
   <script>
 
+  var curwidth = 600;
+
+  document.getElementById("myCanvas").addEventListener("mousedown",function(e){
+
+    if (e.button!==0){
+      return;
+    }
+
+    if (!e.ctrlKey){
+      curwidth+=200;
+    }else if(curwidth>200){
+      curwidth-=200;
+    }
+
+    document.getElementById('myCanvas').style.width = curwidth + 'px';
+
+  });
+
+
+
+  function setStatus(text){
+    document.getElementById("status").innerHTML=text;
+  }
 
   function loadCanvas(image, width, height) {
     var canvas = document.getElementById('myCanvas');
@@ -32,8 +68,8 @@
 
     evtSource.addEventListener("progress", function(e) {
      
-      console.log(e.data)
-
+      setStatus(e.data);
+     
     }, false);
 
 
@@ -49,15 +85,6 @@
 
       loadCanvas(img, width, height);
 
-      /*
-      var img = document.createElement('img');
-        var url = window.URL || window.webkitURL;
-        img.onload = function(){
-        loadCanvas(this);
-      }
-      img.src = url.createObjectURL(e.data);
-      */
-
     }, false);
 
   }
@@ -65,8 +92,32 @@
 
 
 
-    function handleFiles(files) {
+    function handleFiles() {
 
+      var t = document.getElementsByClassName("tagname");
+
+      var tags = [].slice.call(t).map(function(tag){
+        return tag.value;
+      }).filter(function(val){
+        return val.length>0;
+      });
+
+      console.log(tags);
+
+      if (tags.length==0) {
+        setStatus("please enter at least one tag");
+        return;
+      }
+
+      var terms = tags.reduce(function(cur,next,indx){
+        if (indx){
+          cur+="&";
+        }
+        return cur+"terms=" + next;
+      },"?");
+
+      var el = document.getElementById("imageinput");
+      var files = el.files;
 
       reader = new FileReader();
 
@@ -79,7 +130,7 @@
         var dv = new Int8Array(buffer, 0);
 
         var xhr = new XMLHttpRequest;
-        xhr.open("POST", "/postimage", true);
+        xhr.open("POST", "/postimage"+terms, true);
 
         xhr.onload = function () {
 
