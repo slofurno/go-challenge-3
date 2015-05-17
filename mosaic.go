@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-"reflect"
-	"fmt"
 	"io"
 	"math"
 	"sync"
