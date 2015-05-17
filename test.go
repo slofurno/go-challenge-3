@@ -520,7 +520,7 @@ func sRGBtoLinear(s uint8) float64 {
 	//uint8(255*L)
 	
 }
-func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
+func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	
 	r:=float64(e1.R)-float64(e2.R)
 	g:=float64(e1.G)-float64(e2.G)
@@ -530,7 +530,7 @@ func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	
 }
 
-func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
+func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	//http://www.compuphase.com/cmetric.htm
   rmean := int64(( e1.R + e2.R ) / 2)
   r := int64(e1.R - e2.R);

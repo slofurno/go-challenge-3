@@ -3,22 +3,102 @@
   <head>
     <meta charset="utf-8">
     <title>title</title>
-  
 
   </head>
   <body>
 
+    <input type="file" id="input" onchange="handleFiles(this.files)">
+
+    <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;"></canvas> 
+
   <script>
 
-    var evtSource = new EventSource("listen?key=5aDjwusqtJrBf9fz");
+
+  function loadCanvas(image, width, height) {
+    var canvas = document.getElementById('myCanvas');
+    canvas.width=width;
+    canvas.height=height;
+    var context = canvas.getContext('2d');
+
+    // load image
+    context.drawImage(image, 0, 0); 
+}
+
+
+  function listen(key){
+
+    var evtSource = new EventSource("listen?key="+key);
     console.log("fuck")
 
-    evtSource.onmessage = function(e) {
-   
+    evtSource.addEventListener("progress", function(e) {
+     
       console.log(e.data)
+
+    }, false);
+
+
+    evtSource.addEventListener("image", function(e) {
+     
+      var result = JSON.parse(e.data)
+      var height = result.height;
+      var width=result.width;
+      var base64 = result.base64;
+
+      var img = new Image();   // Create new img element
+      img.src = 'data:image/png;base64,'+base64;
+
+      loadCanvas(img, width, height);
+
+      /*
+      var img = document.createElement('img');
+        var url = window.URL || window.webkitURL;
+        img.onload = function(){
+        loadCanvas(this);
+      }
+      img.src = url.createObjectURL(e.data);
+      */
+
+    }, false);
+
+  }
+
+
+
+
+    function handleFiles(files) {
+
+
+      reader = new FileReader();
+
+      reader.onload = function (e) {
+
+        var buffer = e.target.result;
+
+        console.log(e);
+
+        var dv = new Int8Array(buffer, 0);
+
+        var xhr = new XMLHttpRequest;
+        xhr.open("POST", "/postimage", true);
+
+        xhr.onload = function () {
+
+          //console.log(this.response);
+          listen(this.response) 
+
+        };
+
+        xhr.send(dv);
+
+      };
+
+      console.log(files[0]);
+
+      reader.readAsArrayBuffer(files[0]);
 
 
     }
+
 
   </script>
   </body>

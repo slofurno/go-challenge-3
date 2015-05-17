@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/base64"
 
 	"math/rand"
 //	"io"
@@ -20,6 +21,14 @@ import (
 	_ "image/png"
 	_ "image/jpeg"
 )
+
+type ImageDto struct {
+	
+	Data string
+	Height int
+	Width int
+	
+}
 
 type MosRequest struct {
 	
@@ -50,6 +59,9 @@ type MosProgress struct {
 type MosResult struct {
 	
 	Mosaic *bytes.Buffer
+	Width int
+	Height int
+	
 }
 
 var MosRequests = make(map[string]*MosRequest)
@@ -86,14 +98,20 @@ func listen(w http.ResponseWriter, req *http.Request) {
 		select{
 			case msg := <-mr.Progress:
 			fmt.Println("goto ne: ", msg)
+			rw.Write([]byte("event: progress\n"))
 			rw.Write([]byte("data: " + msg+"\n\n"))
 			rw.Flush()
 			
 			case result := <-mr.Result:
 			fmt.Println("loks done")
-			buf:=result.Mosaic
+			str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
+			
+			json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
+			
+			rw.Write([]byte("event: image\n"))
 			rw.Write([]byte("data: "))
-			rw.Write(buf.Bytes())
+			//rw.Write(buf.Bytes())
+			rw.Write([]byte(json))
 			rw.Write([]byte("\n\n"))
 			rw.Flush()
 			
@@ -225,16 +243,16 @@ func buildMosaic(mr *MosRequest){
 		}
 	}
 	
-//	var b bytes.Buffer
+	var b bytes.Buffer
 	
 	
 	
-	mf,_ := os.OpenFile(mr.Key+".png",os.O_CREATE, 0666)
-	defer mf.Close()
-	png.Encode(mf, mosaic)
+	//mf,_ := os.OpenFile(mr.Key+".png",os.O_CREATE, 0666)
+	//defer mf.Close()
+	png.Encode(&b, mosaic)
 	
 	mr.Progress<-"ready for download"
-	//mr.Result <- MosResult{Mosaic:&b}
+	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
 	
 }
 
