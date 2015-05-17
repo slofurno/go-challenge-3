@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>title</title>
+  
+
+  </head>
+  <body>
+
+  <script>
+
+    var evtSource = new EventSource("listen?key=test");
+    console.log("fuck")
+
+    evtSource.onmessage = function(e) {
+   
+      console.log(e.data)
+
+
+    }
+
+  </script>
+  </body>
+</html>
