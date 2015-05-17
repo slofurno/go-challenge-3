@@ -73,8 +73,7 @@ func flickrdownload(mr *MosRequest) []*image.Image {
 	
 	for _,t := range mr.Terms {
 		
-		fmt.Println("terms: ", t)
-		mr.Progress<-"searching for images: " + t
+		mr.Progress<-"getting " + t + "s"
 		
 		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+t+ "&page=1&format=json&per_page=500&content_type=1"
 		res, err:= http.Get(uri)

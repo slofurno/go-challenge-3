@@ -45,7 +45,7 @@ func NewMosRequest(image *image.RGBA, terms []string) *MosRequest {
 	r:=&MosRequest{}
 	r.Image=image
 	r.Terms=terms
-	r.Progress = make(chan string, 10)
+	r.Progress = make(chan string, 15)
 	r.Result = make(chan MosResult, 1)
 		
 	return r
@@ -73,8 +73,7 @@ var once sync.Once
 func listen(w http.ResponseWriter, req *http.Request) {
 	
 	key := req.URL.Query().Get("key")
-	fmt.Println("WTFWTFWTF", key)
-	
+		
 	h, _ := w.(http.Hijacker)
 	conn, rw, _ := h.Hijack()
 	defer conn.Close()
@@ -82,10 +81,8 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte("Content-Type: text/event-stream\r\n\r\n"))
 	rw.Flush()
 	
-	//w.Header().Set("Content-Type","text/event-stream")
-	//io.WriteString(w,"\n\n")
 	
-	var mr *MosRequest// = MosRequests[key]
+	var mr *MosRequest
 	var ok bool
 	
 	if mr, ok = MosRequests[key]; !ok {
@@ -105,7 +102,7 @@ func listen(w http.ResponseWriter, req *http.Request) {
 			rw.Flush()
 			
 			case result := <-mr.Result:
-			fmt.Println("loks done")
+			
 			str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
 			
 			json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
@@ -116,16 +113,12 @@ func listen(w http.ResponseWriter, req *http.Request) {
 			rw.Write([]byte(json))
 			rw.Write([]byte("\n\n"))
 			rw.Flush()
-			return
-	
+			return	
 			
 		}
-	
 		
 	}
-	
-	
-	
+		
 }
 
 func postimage(w http.ResponseWriter, req *http.Request) {
@@ -231,9 +224,11 @@ func buildMosaic(mr *MosRequest){
 	}
 	
 	var b bytes.Buffer
-	png.Encode(&b, mosaic)
 	
+		
 	mr.Progress<-"downloading mosaic"
+	
+	png.Encode(&b, mosaic)
 	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
 	
 }
