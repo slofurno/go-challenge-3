@@ -97,6 +97,8 @@
       var img = new Image();   
       img.src = 'data:image/png;base64,'+base64;
 
+      evtSource.close();
+
       loadCanvas(img, width, height);
 
     }, false);

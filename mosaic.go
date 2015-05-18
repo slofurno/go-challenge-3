@@ -28,6 +28,8 @@ type MosImage struct {
 	
 	Image *image.RGBA
 	AvgColor *color.RGBA
+	Tile *image.RGBA
+	Uses int
 }
 
 
@@ -73,15 +75,13 @@ func flickrdownload(mr *MosRequest) []*image.Image {
 		
 		mr.Progress<-"getting " + t + "s"
 		
-		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+t+ "&page=1&format=json&per_page=500&content_type=1"
+		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+t+ "&page=1&format=json&per_page=500&content_type=1&sort=relevance"
 		res, err:= http.Get(uri)
 		contents, err := ioutil.ReadAll(res.Body)
 		rawlen := len(contents)
 		
 		j:=contents[14:rawlen-1]
-	
-		//s:=string(j)
-		
+			
 		var f FlickrResponse
 		err=json.Unmarshal(j,&f)
 		
@@ -89,8 +89,7 @@ func flickrdownload(mr *MosRequest) []*image.Image {
 		if err!=nil{
 			log.Println(err)
 		}
-		//plen := len(f.Photos.Photo)
-		
+				
 		var wg sync.WaitGroup
 	
 		for _, p := range f.Photos.Photo{
@@ -356,7 +355,7 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	
 }
 
-func buildDictionary(images []*image.Image) []MosImage {//map[float32]*image.RGBA {
+func buildDictionary(images []*image.Image) []MosImage {
 	
 	count:=len(images)
 	
@@ -374,11 +373,14 @@ func buildDictionary(images []*image.Image) []MosImage {//map[float32]*image.RGB
 			down:=downsample(rgba,image.Rect(0,0,64,64))
 			//lum := averageLum(rgba, rgba.Bounds())
 			//dict[lum] = down
+			tile:=downsample(down,image.Rect(0,0,2,2))
 			
 			mi:=&MosImage{}
 			mi.Image=down
+			mi.Tile=tile
 			ac:=averageColor(down,down.Bounds())
 			mi.AvgColor=&ac
+			mi.Uses=0
 			
 			dic=append(dic,*mi)
 			
@@ -420,7 +422,18 @@ func sRGBtoLinear(s uint8) float64 {
 	
 	return L
 }
-func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
+
+func colorDistance3(e1 *color.RGBA, e2 *color.RGBA) float64 {
+	
+	r:=sRGBtoLinear(e1.R)-sRGBtoLinear(e2.R)
+	g:=sRGBtoLinear(e1.G)-sRGBtoLinear(e2.G)
+	b:=sRGBtoLinear(e1.B)-sRGBtoLinear(e2.B)
+	
+	return math.Sqrt(r*r+g*g+b*b)
+	
+}
+
+func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	
 	r:=float64(e1.R)-float64(e2.R)
 	g:=float64(e1.G)-float64(e2.G)
@@ -430,7 +443,7 @@ func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	
 }
 
-func colorDistance(e1 *color.RGBA, e2 *color.RGBA) float64 {
+func colorDistance2(e1 *color.RGBA, e2 *color.RGBA) float64 {
 	//http://www.compuphase.com/cmetric.htm
   rmean := int64(( e1.R + e2.R ) / 2)
   r := int64(e1.R - e2.R);

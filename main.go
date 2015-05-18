@@ -124,7 +124,7 @@ func listen(w http.ResponseWriter, req *http.Request) {
 func postimage(w http.ResponseWriter, req *http.Request) {
 	
 	
-	
+	defer req.Body.Close()
 	buf, err := ioutil.ReadAll(req.Body)
 	buffer:=bytes.NewReader(buf)
 
@@ -132,18 +132,16 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 	
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 	
 	rgba,err := convertImage(m)
-	
 	
 	qs:=req.URL.Query()
 	terms:= qs["terms"]
 		
 	mr := NewMosRequest(rgba,terms)
 	mr.Key=randomString(16)
-	//mr := MosRequest{Image:rgba, Id:nextid}
-	nextid++
 	
 	MosRequests[mr.Key] = mr
 	
@@ -160,6 +158,15 @@ func saveImage(img *image.RGBA, fn string) {
 	f,_ := os.OpenFile(fn,os.O_CREATE, 0666)
 	defer f.Close()
 	png.Encode(f, img)
+	
+}
+
+func coinFlip() bool {
+	
+	if rand.Float64()>=.5 {
+		return true
+	}
+	return false
 	
 }
 
@@ -181,13 +188,16 @@ func init(){
 
 func buildMosaic(mr *MosRequest){
 
+	var dx = 2
+	var dy = 2
+
 	mr.Progress<-"starting mosaic"
 	rgba:=mr.Image
 	
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
-	out:=downsample(rgba, image.Rect(0,0,width/8,height/8))
+	out:=downsample(rgba, image.Rect(0,0,width/4,height/4))
 	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
 	
 	images:=flickrdownload(mr)	
@@ -195,10 +205,12 @@ func buildMosaic(mr *MosRequest){
 	dict:=buildDictionary(images)
 	mr.Progress<-"building mosaic"
 	
-	for j:=0;j<out.Bounds().Max.Y;j++ {
-		for i:=0;i<out.Bounds().Max.X;i++ {
+	for j:=0;j<out.Bounds().Max.Y;j+=dy {
+		for i:=0;i<out.Bounds().Max.X;i+=dx {
 			
-			pixel := out.RGBAAt(i,j)
+			//pixel := out.RGBAAt(i,j)
+			
+			//tile:=out.SubImage(image.Rect(i,j,i+dx,j+dy))
 						
 			var min float64 =999999
 			var img *image.RGBA
@@ -208,17 +220,36 @@ func buildMosaic(mr *MosRequest){
 				
 				mi := dict[v]
 				//TODO:higher resolution color dif
-				dif:=colorDistance(mi.AvgColor, &pixel)
+				
+				if mi.Uses<4 || coinFlip(){
+				
+				var dif float64 = 0
+				
+				for dj:=0;dj<dy;dj++ {
+					for di:=0;di<dx;di++ {
+						
+						pixel := out.RGBAAt(i+di,j+dj)
+						tpixel := mi.Tile.RGBAAt(di,dj)
+						dif+= colorDistance3(&tpixel, &pixel)
+						
+					}
+				}
+				
+				
+				//dif:=colorDistance(mi.AvgColor, &pixel)
 					
 				if dif<min {
 					match = v
 					min = dif
 				}
 				
+				}
+				
 			}
 			img = dict[match].Image
+			dict[match].Uses++
 							
-			draw.Draw(mosaic, image.Rect(64*i,64*j,64*i+64,64*j+64), img, img.Bounds().Min, draw.Src)
+			draw.Draw(mosaic, image.Rect(64*i/2,64*j/2,64*i/2+64,64*j/2+64), img, img.Bounds().Min, draw.Src)
 					
 		}
 	}
@@ -239,9 +270,9 @@ func main(){
   go func() {
 				
 	  for {
-	    var mr *MosRequest;
+	    //var mr *MosRequest;
       select {
-    	case mr = <-MosQueue:
+    	case mr := <-MosQueue:
 				buildMosaic(mr)
       }
 	  }
