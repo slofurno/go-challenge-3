@@ -64,8 +64,12 @@
   function listen(key){
 
     var evtSource = new EventSource("listen?key="+key);
-    console.log("fuck")
 
+    evtSource.onerror=function(e){
+      evtSource.close();
+      //console.log(e);
+    }
+   
     evtSource.addEventListener("progress", function(e) {
      
       setStatus(e.data);
@@ -80,7 +84,7 @@
       var width=result.width;
       var base64 = result.base64;
 
-      var img = new Image();   // Create new img element
+      var img = new Image();   
       img.src = 'data:image/png;base64,'+base64;
 
       loadCanvas(img, width, height);
