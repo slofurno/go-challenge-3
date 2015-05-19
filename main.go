@@ -22,6 +22,15 @@ import (
 	_ "image/jpeg"
 )
 
+const (
+	TILE_X = 8
+	TILE_Y = 8
+	TILE_X_RESOLUTION =2
+	TILE_Y_RESOLUTION =2
+	MOSAIC_SCALE=8
+	
+)
+
 type ImageDto struct {
 	
 	Data string
@@ -188,8 +197,8 @@ func init(){
 
 func buildMosaic(mr *MosRequest){
 
-	var dx = 2
-	var dy = 2
+	var dx = TILE_X_RESOLUTION
+	var dy = TILE_Y_RESOLUTION
 
 	mr.Progress<-"starting mosaic"
 	rgba:=mr.Image
@@ -197,13 +206,18 @@ func buildMosaic(mr *MosRequest){
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
-	out:=downsample(rgba, image.Rect(0,0,width/4,height/4))
-	mosaic := image.NewRGBA(image.Rect(0,0,width*8,height*8))
+	outscalex:=TILE_X/TILE_X_RESOLUTION
+	outscaley:=TILE_Y/TILE_Y_RESOLUTION
+	
+	out:=downsample(rgba, image.Rect(0,0,width/outscalex,height/outscaley))
+	mosaic := image.NewRGBA(image.Rect(0,0,width*MOSAIC_SCALE,height*MOSAIC_SCALE))
 	
 	images:=flickrdownload(mr)	
 	mr.Progress<-"processing images"
 	dict:=buildDictionary(images)
 	mr.Progress<-"building mosaic"
+	
+	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
 	
 	for j:=0;j<out.Bounds().Max.Y;j+=dy {
 		for i:=0;i<out.Bounds().Max.X;i+=dx {
@@ -223,25 +237,25 @@ func buildMosaic(mr *MosRequest){
 				
 				if mi.Uses<4 || coinFlip(){
 				
-				var dif float64 = 0
-				
-				for dj:=0;dj<dy;dj++ {
-					for di:=0;di<dx;di++ {
-						
-						pixel := out.RGBAAt(i+di,j+dj)
-						tpixel := mi.Tile.RGBAAt(di,dj)
-						dif+= colorDistance3(&tpixel, &pixel)
-						
-					}
-				}
-				
-				
-				//dif:=colorDistance(mi.AvgColor, &pixel)
+					var dif float64 = 0
 					
-				if dif<min {
-					match = v
-					min = dif
-				}
+					for dj:=0;dj<dy;dj++ {
+						for di:=0;di<dx;di++ {
+							
+							pixel := out.RGBAAt(i+di,j+dj)
+							tpixel := mi.Tile.RGBAAt(di,dj)
+							dif+= colorDistance(&tpixel, &pixel)
+							
+						}
+					}
+					
+					
+					//dif:=colorDistance(mi.AvgColor, &pixel)
+						
+					if dif<min {
+						match = v
+						min = dif
+					}
 				
 				}
 				
@@ -249,7 +263,7 @@ func buildMosaic(mr *MosRequest){
 			img = dict[match].Image
 			dict[match].Uses++
 							
-			draw.Draw(mosaic, image.Rect(64*i/2,64*j/2,64*i/2+64,64*j/2+64), img, img.Bounds().Min, draw.Src)
+			draw.Draw(mosaic, image.Rect(TILE_SCALE*i/TILE_X_RESOLUTION,TILE_SCALE*j/TILE_Y_RESOLUTION,TILE_SCALE*i/TILE_X_RESOLUTION+TILE_SCALE,TILE_SCALE*j/TILE_X_RESOLUTION+TILE_SCALE), img, img.Bounds().Min, draw.Src)
 					
 		}
 	}
