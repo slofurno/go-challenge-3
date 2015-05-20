@@ -49,6 +49,12 @@ type MosRequest struct {
 	Result chan MosResult
 }
 
+type ImageResponse struct{
+	
+		Image *image.Image
+		Err error	
+}
+
 func NewMosRequest(image *image.RGBA, terms []string) *MosRequest {
 	
 	r:=&MosRequest{}
@@ -195,12 +201,21 @@ func init(){
 	 rand.Seed( time.Now().UTC().UnixNano())
 }
 
+func worker(queue <-chan string, results chan<- ImageResponse) {
+    for q := range queue {
+
+			m,err := downloadanddecode2(q)
+
+      results <- ImageResponse{Image:m,Err:err}
+    }
+}
+
 func buildMosaic(mr *MosRequest){
 
 	var dx = TILE_X_RESOLUTION
 	var dy = TILE_Y_RESOLUTION
 
-	mr.Progress<-"starting mosaic"
+
 	rgba:=mr.Image
 	
 	height:=rgba.Bounds().Max.Y
@@ -212,9 +227,53 @@ func buildMosaic(mr *MosRequest){
 	out:=downsample(rgba, image.Rect(0,0,width/outscalex,height/outscaley))
 	mosaic := image.NewRGBA(image.Rect(0,0,width*MOSAIC_SCALE,height*MOSAIC_SCALE))
 	
-	images:=flickrdownload(mr)	
-	mr.Progress<-"processing images"
-	dict:=buildDictionary(images)
+	//images:=flickrdownload(mr)	
+	
+	
+	
+	mr.Progress<-"downloading source images"
+	var urls []string = flickrSearch(500,mr.Terms...)
+	queue := make(chan string, 100)
+  results := make(chan ImageResponse, 100)
+	
+	
+	
+	for w := 1; w <= 100; w++ {
+    go worker(queue, results)
+  }
+	
+	
+	go func(){
+		for _,url:=range urls{
+			queue<-url
+		}
+		close(queue)
+	}()
+	
+	var result ImageResponse
+	var images []MosImage
+	
+	
+	for i := 0;i<len(urls);i++ {
+		
+		result= <-results
+		
+		if result.Err == nil {
+			mi,err:=NewMosImage(result.Image)
+			
+			if err==nil {
+				images = append(images,mi)
+			}			
+			
+		}
+		
+	}
+	
+	
+	
+	dict:=images
+	
+	//dict:=buildDictionary(images)
 	mr.Progress<-"building mosaic"
 	
 	const TILE_SCALE = TILE_Y*MOSAIC_SCALE

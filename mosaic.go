@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"errors"
 	"io"
 	"math"
@@ -66,6 +67,38 @@ type FlickrResponse struct{
 	
 }
 
+func flickrSearch(count int, terms ...string) []string {
+	
+	var results []string = make([]string,0,count*len(terms))
+	
+	for _,term:=range terms {
+		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+term+ "&page=1&format=json&per_page="+strconv.Itoa(count) + "&content_type=1&sort=relevance"
+		res, err:= http.Get(uri)
+		contents, err := ioutil.ReadAll(res.Body)
+		rawlen := len(contents)
+		
+		j:=contents[14:rawlen-1]
+			
+		var f FlickrResponse
+		err=json.Unmarshal(j,&f)
+		
+		if err!=nil{
+			log.Println(err)
+		}
+		
+		for _,p:=range f.Photos.Photo {
+			results = append(results,p.downloadUrl())
+			
+		}
+		
+	
+	
+	}
+	
+	return results
+	
+}
+
 func flickrdownload(mr *MosRequest) []*image.Image {
 	
 	results:=make([]*image.Image,2000,2000)
@@ -125,7 +158,7 @@ func convertToPNG(w io.Writer, r io.Reader) error {
 }
 
 
-func downloadanddecode(url string, fn string) *image.Image{
+func downloadanddecode2(url string) (*image.Image, error){
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -135,7 +168,21 @@ func downloadanddecode(url string, fn string) *image.Image{
 		log.Println(err)
 	}
 	
-	return &m;
+	return &m,err
+	
+}
+
+func downloadanddecode(url string, fn string) (*image.Image){
+	res, err := http.Get(url)
+	defer res.Body.Close()
+	
+	m, _, err := image.Decode(res.Body)
+	
+	if err!=nil {
+		log.Println(err)
+	}
+	
+	return &m
 	
 }
 
@@ -194,6 +241,8 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 
 func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	
+	//determines the best fit rectangle with the same aspect ratio and a linear 
+	//downsample ratio and takes it from the center of our source image
   
 	xratio := int(img.Bounds().Max.X/size.Max.X)
 	yratio:=int(img.Bounds().Max.Y/size.Max.Y)
@@ -347,10 +396,12 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 		rgba=nil
 	}
 	
+	
+	
 	if rgba!=nil {
 		return rgba,nil
 	}else{
-		return nil,errors.New("tevs")
+		return nil,errors.New(reflect.TypeOf(m).String() + " not supported")
 	}
 	
 }
@@ -389,6 +440,31 @@ func buildDictionary(images []*image.Image) []MosImage {
 	}
 	
 	return dic
+	
+}
+
+func NewMosImage(img *image.Image) (MosImage,error) {
+	
+	rgba,err := convertImage(*img)
+	
+	var mi MosImage
+	
+	if err!=nil {
+		return mi,err
+	}else{
+		down:=downsample(rgba,image.Rect(0,0,64,64))
+		tile:=downsample(down,image.Rect(0,0,2,2))
+		
+		mi=MosImage{}
+		mi.Image=down
+		mi.Tile=tile
+		ac:=averageColor(down,down.Bounds())
+		mi.AvgColor=&ac
+		mi.Uses=0
+		
+		return mi,nil
+			
+	}
 	
 }
 
