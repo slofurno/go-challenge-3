@@ -94,7 +94,7 @@
       var url = URL.createObjectURL(blob);
 
       document.getElementById("myCanvas").src='data:image/jpeg;base64,'+JSON.parse(e.data);
-
+      evtSource.close();
       return;
       var result = JSON.parse(e.data);
       var height = result.height;

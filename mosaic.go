@@ -324,7 +324,8 @@ func createGrayscale(img *image.RGBA) *image.RGBA {
 	return gray	
 }
 
-func YCbCrToRGB(src *image.YCbCr) *image.RGBA {
+
+func convertToRGBA(src image.Image) *image.RGBA {
 	
 	dst:=image.NewRGBA(src.Bounds())
 	pix:=dst.Pix
@@ -390,10 +391,12 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	switch m.(type) {
 	case *image.RGBA: 
 		rgba=m.(*image.RGBA)
+	/*
 	case *image.YCbCr:
 		rgba=YCbCrToRGB(m.(*image.YCbCr))
+		*/
 	default:
-		rgba=nil
+		rgba=convertToRGBA(m)
 	}
 	
 	

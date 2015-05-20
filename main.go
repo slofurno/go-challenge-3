@@ -2,6 +2,7 @@
 package main
 
 import (
+	"runtime"
 	"image/jpeg"
 	"encoding/json"
 	//"encoding/base64"
@@ -235,12 +236,12 @@ func buildMosaic(mr *MosRequest){
 	
 	mr.Progress<-"downloading source images"
 	var urls []string = flickrSearch(500,mr.Terms...)
-	queue := make(chan string, 100)
-  results := make(chan ImageResponse, 100)
+	queue := make(chan string, 200)
+  results := make(chan ImageResponse, 200)
 	
 	
 	
-	for w := 1; w <= 100; w++ {
+	for i := 0; i < 200; i++ {
     go worker(queue, results)
   }
 	
@@ -279,10 +280,7 @@ func buildMosaic(mr *MosRequest){
 	mr.Progress<-"building mosaic"
 	
 	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
-	
-	var averagedif []float64
-	
-	
+		
 	for j:=0;j<out.Bounds().Max.Y;j+=dy {
 		for i:=0;i<out.Bounds().Max.X;i+=dx {
 			
@@ -293,6 +291,7 @@ func buildMosaic(mr *MosRequest){
 			var min float64 =999999
 			var img *image.RGBA
 			var match int = -1
+			var matches []int
 			
 			for v := range dict {
 				
@@ -320,12 +319,18 @@ func buildMosaic(mr *MosRequest){
 						match = v
 						min = dif
 					}
+					
+					if dif<120.0 {
+						matches=append(matches,v)
+					}
 				
 				}
 				
 			}
 			
-			averagedif=append(averagedif,min)
+			if len(matches)>0 {
+				match = matches[rand.Intn(len(matches))]
+			}
 			
 			img = dict[match].Image
 			dict[match].Uses++
@@ -334,21 +339,8 @@ func buildMosaic(mr *MosRequest){
 					
 		}
 	}
-	
-	total:=0.0
-	max:=0.0
-	for _,v:=range averagedif {
-		total +=v
-		
-		if v>max {
-			max = v
-		}
-		
-	}
-	avg:= total/float64(len(averagedif))
 
-	fmt.Println(avg, max)
-	
+		
 	var b bytes.Buffer
 	
 		
@@ -363,6 +355,8 @@ func buildMosaic(mr *MosRequest){
 
 
 func main(){
+	
+	runtime.GOMAXPROCS(4)
 		
   go func() {
 				
