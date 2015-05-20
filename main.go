@@ -2,14 +2,15 @@
 package main
 
 import (
+	"image/jpeg"
 	"encoding/json"
-	"encoding/base64"
+	//"encoding/base64"
 
 	"math/rand"
 //	"io"
 	"sync"
 	"time"
-	"strconv"
+	//"strconv"
 	"bytes"
 	"io/ioutil"
 	"net/http"
@@ -279,6 +280,9 @@ func buildMosaic(mr *MosRequest){
 	
 	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
 	
+	var averagedif []float64
+	
+	
 	for j:=0;j<out.Bounds().Max.Y;j+=dy {
 		for i:=0;i<out.Bounds().Max.X;i+=dx {
 			
@@ -320,6 +324,9 @@ func buildMosaic(mr *MosRequest){
 				}
 				
 			}
+			
+			averagedif=append(averagedif,min)
+			
 			img = dict[match].Image
 			dict[match].Uses++
 							
@@ -328,12 +335,28 @@ func buildMosaic(mr *MosRequest){
 		}
 	}
 	
+	total:=0.0
+	max:=0.0
+	for _,v:=range averagedif {
+		total +=v
+		
+		if v>max {
+			max = v
+		}
+		
+	}
+	avg:= total/float64(len(averagedif))
+
+	fmt.Println(avg, max)
+	
 	var b bytes.Buffer
 	
 		
 	mr.Progress<-"downloading mosaic"
 	
-	png.Encode(&b, mosaic)
+	jpeg.Encode(&b,mosaic,nil)
+	
+	//png.Encode(&b, mosaic)
 	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
 	
 }
