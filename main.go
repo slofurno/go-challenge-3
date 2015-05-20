@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"encoding/base64"
 
 	"math/rand"
@@ -118,14 +119,14 @@ func listen(w http.ResponseWriter, req *http.Request) {
 			
 			case result := <-mr.Result:
 			
-			str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
-			
-			json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
+			//str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
+			//json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
+			bb,_:= json.Marshal(result.Mosaic.Bytes())		
 			
 			rw.Write([]byte("event: image\n"))
 			rw.Write([]byte("data: "))
-			//rw.Write(buf.Bytes())
-			rw.Write([]byte(json))
+			rw.Write(bb)
+			//rw.Write([]byte(json))
 			rw.Write([]byte("\n\n"))
 			rw.Flush()
 			return	
