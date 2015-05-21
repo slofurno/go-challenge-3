@@ -1,28 +1,23 @@
 package main
 
 import (
-	"reflect"
-	"errors"
-	"io"
+	//"reflect"
+	//"errors"
+//	"io"
 	"math"
-	"sync"
+	//"sync"
 
 	"strconv"
 	"io/ioutil"
 	"net/http"
-	"image/png"
+	//"image/png"
 	"encoding/json"
-
-)
-
-import(
-	"image"
+		"image"
 	_ "image/png"
 	_ "image/jpeg"
-	"os"
+	//"os"
 	"log"
 	"image/color"
-	
 )
 
 type MosImage struct {
@@ -32,7 +27,6 @@ type MosImage struct {
 	Tile *image.RGBA
 	Uses int
 }
-
 
 type FlickrPhoto struct{
 	Id string `json:"id"`
@@ -90,75 +84,44 @@ func flickrSearch(count int, terms ...string) []string {
 			results = append(results,p.downloadUrl())
 			
 		}
-		
-	
-	
-	}
-	
+			
+	}	
 	return results
-	
 }
 
-func flickrdownload(mr *MosRequest) []*image.Image {
+func downloadImages(urls []string) []MosImage {
 	
-	results:=make([]*image.Image,2000,2000)
-	count:=0
+	queue := make(chan string, 200)
+  results := make(chan ImageResponse, 200)
 	
-	for _,t := range mr.Terms {
-		
-		mr.Progress<-"getting " + t + "s"
-		
-		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+t+ "&page=1&format=json&per_page=500&content_type=1&sort=relevance"
-		res, err:= http.Get(uri)
-		contents, err := ioutil.ReadAll(res.Body)
-		rawlen := len(contents)
-		
-		j:=contents[14:rawlen-1]
-			
-		var f FlickrResponse
-		err=json.Unmarshal(j,&f)
-		
-		
-		if err!=nil{
-			log.Println(err)
+	for i := 0; i < 200; i++ {
+    go worker(queue, results)
+  }
+	
+	go func(){
+		for _,url:=range urls{
+			queue<-url
 		}
-				
-		var wg sync.WaitGroup
+		close(queue)
+	}()
 	
-		for _, p := range f.Photos.Photo{
-			
-			wg.Add(1)
-			go func(url string, filename string, indx int){
-				defer wg.Done()
-				
-				results[indx]=downloadanddecode(url,filename)
-			}(p.downloadUrl(),"jpgs/"+p.Id+".jpg", count)
-			
-			count++
-					
-		}
-		wg.Wait()
+	var result ImageResponse
+	var images []MosImage
+	
+	for i := 0;i<len(urls);i++ {
+		result= <-results
 		
-		
+		if result.Err == nil {
+			mi:=NewMosImage(result.Image)
+			images = append(images,mi)								
+		}		
 	}
 	
-	//fmt.Println("result len: ", len(results))
-	
-	return results[0:count];
+	return images
 	
 }
 
-
-func convertToPNG(w io.Writer, r io.Reader) error {
- img, _, err := image.Decode(r)
- if err != nil {
-  return err
- }
- return png.Encode(w, img)
-}
-
-
-func downloadanddecode2(url string) (*image.Image, error){
+func downloadanddecode(url string) (*image.Image, error){
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -171,44 +134,6 @@ func downloadanddecode2(url string) (*image.Image, error){
 	return &m,err
 	
 }
-
-func downloadanddecode(url string, fn string) (*image.Image){
-	res, err := http.Get(url)
-	defer res.Body.Close()
-	
-	m, _, err := image.Decode(res.Body)
-	
-	if err!=nil {
-		log.Println(err)
-	}
-	
-	return &m
-	
-}
-
-func downloadTest(url string, fn string){
-			
-	res, err := http.Get(url)
-	defer res.Body.Close()
-	
-	if err!=nil {
-		log.Println(err)
-	}
-	
-	out, err := os.Create(fn)
-	if err!=nil {
-		log.Println(err)
-	}
-	defer out.Close()
-		
-	n, err := io.Copy(out, res.Body)
-	if err!=nil {
-		log.Println(err)
-	}
-	log.Println("bytes downloaded : " + strconv.Itoa(int(n)))
-			
-}
-
 
 func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	
@@ -294,37 +219,6 @@ func averageLum(img *image.RGBA, r image.Rectangle) float32 {
 	
 }
 
-func createGrayscale(img *image.RGBA) *image.RGBA {
-	
-	bounds := img.Bounds()
-	width:=bounds.Max.X
-	height:=bounds.Max.Y
-  gray := image.NewRGBA(bounds)
-	
-	pixels := gray.Pix
-	
-	
-	for i := 0; i < width;i++ {
-		for j :=0;j<height;j++ {
-			
-			offset:=4*(width*j + i)
-			
-			r, g, b, _ := img.At(i, j).RGBA()
-			lum:=0.299*float32(r) + 0.587*float32(g) + 0.114*float32(b)
-			z:=uint8(int32(lum) >> 8)
-			
-			pixels[offset]=z
-			pixels[offset+1]=z
-			pixels[offset+2]=z
-			pixels[offset+3]=255
-			
-		}
-		
-	}	
-	return gray	
-}
-
-
 func convertToRGBA(src image.Image) *image.RGBA {
 	
 	dst:=image.NewRGBA(src.Bounds())
@@ -348,41 +242,8 @@ func convertToRGBA(src image.Image) *image.RGBA {
 	return dst
 }
 
-func copyPixels(src *image.RGBA, r image.Rectangle) *image.RGBA {
-	
-	dr := image.Rect(0,0,r.Max.X-r.Min.X, r.Max.Y-r.Min.Y)
-	
-	dst := image.NewRGBA(dr)
-	
-	srcwidth := src.Bounds().Max.X
-	//dstwidth := dst.Bounds().Max.X
-	
-	sp:=src.Pix
-	dp:=dst.Pix
-	
-	di:=0
-	
-	for j:= r.Min.Y ; j< r.Max.Y; j++ {
-		for i:= r.Min.X ; i < r.Max.X ; i++ {
-		
-			si := 4*(j * srcwidth + i)
-			
-			dp[di] = sp[si]
-			dp[di+1] = sp[si+1]
-			dp[di+2] = sp[si+2]
-			dp[di+3] = sp[si+3]
-			
-			di+=4
-		}
-		
-	}
-	
-	return dst;
-	
-}
 
-
-func convertImage(m image.Image) (*image.RGBA, error) {
+func convertImage(m image.Image) *image.RGBA {
 	
 	var rgba *image.RGBA
 	
@@ -391,84 +252,31 @@ func convertImage(m image.Image) (*image.RGBA, error) {
 	switch m.(type) {
 	case *image.RGBA: 
 		rgba=m.(*image.RGBA)
-	/*
-	case *image.YCbCr:
-		rgba=YCbCrToRGB(m.(*image.YCbCr))
-		*/
 	default:
 		rgba=convertToRGBA(m)
 	}
 	
-	
-	
-	if rgba!=nil {
-		return rgba,nil
-	}else{
-		return nil,errors.New(reflect.TypeOf(m).String() + " not supported")
-	}
-	
+	return rgba
 }
 
-func buildDictionary(images []*image.Image) []MosImage {
-	
-	count:=len(images)
-	
-	dic := make([]MosImage, 0, count)
-	
 
-	for i:= 0; i<count;i++ {
+func NewMosImage(img *image.Image) (MosImage) {
 	
-		m:=images[i]
-				
-		rgba,err := convertImage(*m)
-		if err!=nil {
-			log.Println(err)
-		}else{
-			down:=downsample(rgba,image.Rect(0,0,64,64))
-			//lum := averageLum(rgba, rgba.Bounds())
-			//dict[lum] = down
-			tile:=downsample(down,image.Rect(0,0,2,2))
-			
-			mi:=&MosImage{}
-			mi.Image=down
-			mi.Tile=tile
-			ac:=averageColor(down,down.Bounds())
-			mi.AvgColor=&ac
-			mi.Uses=0
-			
-			dic=append(dic,*mi)
-			
-		}
-	
-	}
-	
-	return dic
-	
-}
-
-func NewMosImage(img *image.Image) (MosImage,error) {
-	
-	rgba,err := convertImage(*img)
+	rgba := convertImage(*img)
 	
 	var mi MosImage
 	
-	if err!=nil {
-		return mi,err
-	}else{
-		down:=downsample(rgba,image.Rect(0,0,64,64))
-		tile:=downsample(down,image.Rect(0,0,2,2))
-		
-		mi=MosImage{}
-		mi.Image=down
-		mi.Tile=tile
-		ac:=averageColor(down,down.Bounds())
-		mi.AvgColor=&ac
-		mi.Uses=0
-		
-		return mi,nil
-			
-	}
+	down:=downsample(rgba,image.Rect(0,0,64,64))
+	tile:=downsample(down,image.Rect(0,0,2,2))
 	
+	mi=MosImage{}
+	mi.Image=down
+	mi.Tile=tile
+	ac:=averageColor(down,down.Bounds())
+	mi.AvgColor=&ac
+	mi.Uses=0
+	
+	return mi	
 }
 
 

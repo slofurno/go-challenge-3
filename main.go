@@ -48,7 +48,7 @@ type MosRequest struct {
 	Key string
 	Id int
 	Terms []string
-	Progress chan string//= make(chan MosProgress, 10)
+	Progress chan string
 	Result chan MosResult
 }
 
@@ -98,7 +98,6 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte("HTTP/1.1 200 OK\r\n"))
 	rw.Write([]byte("Content-Type: text/event-stream\r\n\r\n"))
 	rw.Flush()
-	
 	
 	var mr *MosRequest
 	var ok bool
@@ -153,7 +152,7 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	
-	rgba,err := convertImage(m)
+	rgba := convertImage(m)
 	
 	qs:=req.URL.Query()
 	terms:= qs["terms"]
@@ -207,7 +206,7 @@ func init(){
 func worker(queue <-chan string, results chan<- ImageResponse) {
     for q := range queue {
 
-			m,err := downloadanddecode2(q)
+			m,err := downloadanddecode(q)
 
       results <- ImageResponse{Image:m,Err:err}
     }
@@ -217,8 +216,6 @@ func buildMosaic(mr *MosRequest){
 
 	var dx = TILE_X_RESOLUTION
 	var dy = TILE_Y_RESOLUTION
-
-
 	rgba:=mr.Image
 	
 	height:=rgba.Bounds().Max.Y
@@ -243,85 +240,33 @@ func buildMosaic(mr *MosRequest){
 	
 	mr.Progress<-"downloading source images"
 	var urls []string = flickrSearch(500,mr.Terms...)
-	queue := make(chan string, 200)
-  results := make(chan ImageResponse, 200)
 	
-	
-	
-	for i := 0; i < 200; i++ {
-    go worker(queue, results)
-  }
-	
-	
-	go func(){
-		for _,url:=range urls{
-			queue<-url
-		}
-		close(queue)
-	}()
-	
-	var result ImageResponse
-	var images []MosImage
-	
-	
-	for i := 0;i<len(urls);i++ {
-		
-		result= <-results
-		
-		if result.Err == nil {
-			mi,err:=NewMosImage(result.Image)
-			
-			if err==nil {
-				images = append(images,mi)
-			}			
-			
-		}
-		
-	}
-	
-	
-	
-	dict:=images
-	
-	//dict:=buildDictionary(images)
+	dict:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
 	
 	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
 		
 	for j:=0;j<out.Bounds().Max.Y;j+=dy {
 		for i:=0;i<out.Bounds().Max.X;i+=dx {
-			
-			//pixel := out.RGBAAt(i,j)
-			
-			//tile:=out.SubImage(image.Rect(i,j,i+dx,j+dy))
 						
 			var min float64 =999999
 			var img *image.RGBA
 			var match int = -1
 			var matches []int
 			
-			for v := range dict {
-				
-				mi := dict[v]
-				//TODO:higher resolution color dif
-				
-				if mi.Uses<4 || coinFlip(){
-				
+			for v,mi := range dict {	
+									
+				if mi.Uses<4 || coinFlip(){				
 					var dif float64 = 0
 					
 					for dj:=0;dj<dy;dj++ {
-						for di:=0;di<dx;di++ {
-							
+						for di:=0;di<dx;di++ {							
 							pixel := out.RGBAAt(i+di,j+dj)
 							tpixel := mi.Tile.RGBAAt(di,dj)
-							dif+= colorDistance(&tpixel, &pixel)
-							
+							dif+= colorDistance(&tpixel, &pixel)							
 						}
-					}
-					
-					
-					//dif:=colorDistance(mi.AvgColor, &pixel)
-						
+					}			
+											
 					if dif<min {
 						match = v
 						min = dif
@@ -329,10 +274,8 @@ func buildMosaic(mr *MosRequest){
 					
 					if dif<120.0 {
 						matches=append(matches,v)
-					}
-				
-				}
-				
+					}				
+				}				
 			}
 			
 			if len(matches)>0 {
@@ -346,18 +289,13 @@ func buildMosaic(mr *MosRequest){
 					
 		}
 	}
-
 		
-	var b bytes.Buffer
-	
-		
+	var b bytes.Buffer		
 	mr.Progress<-"downloading mosaic"
 	
 	jpeg.Encode(&b,mosaic,nil)
-	
 	//png.Encode(&b, mosaic)
 	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
-	
 }
 
 
