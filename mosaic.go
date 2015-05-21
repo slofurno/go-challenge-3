@@ -121,7 +121,7 @@ func downloadImages(urls []string) []MosImage {
 	
 }
 
-func downloadanddecode(url string) (*image.Image, error){
+func downloadanddecode(url string) (image.Image, error){
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -131,7 +131,7 @@ func downloadanddecode(url string) (*image.Image, error){
 		log.Println(err)
 	}
 	
-	return &m,err
+	return m,err
 	
 }
 
@@ -260,9 +260,9 @@ func convertImage(m image.Image) *image.RGBA {
 }
 
 
-func NewMosImage(img *image.Image) (MosImage) {
-	
-	rgba := convertImage(*img)
+func NewMosImage(img image.Image) (MosImage) {
+	//TODO assert image >= 64x64
+	rgba := convertImage(img)
 	
 	var mi MosImage
 	

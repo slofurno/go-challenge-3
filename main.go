@@ -9,7 +9,6 @@ import (
 
 	"math/rand"
 //	"io"
-	"sync"
 	"time"
 	//"strconv"
 	"bytes"
@@ -31,6 +30,7 @@ const (
 	TILE_X_RESOLUTION =2
 	TILE_Y_RESOLUTION =2
 	MOSAIC_SCALE=8
+	MAX_DIFFERENCE = 120.0
 	
 )
 
@@ -54,7 +54,7 @@ type MosRequest struct {
 
 type ImageResponse struct{
 	
-		Image *image.Image
+		Image image.Image
 		Err error	
 }
 
@@ -84,9 +84,6 @@ type MosResult struct {
 
 var MosRequests = make(map[string]*MosRequest)
 var MosQueue = make(chan *MosRequest, 100)
-var nextid int = 0
-var once sync.Once
-
 
 func listen(w http.ResponseWriter, req *http.Request) {
 	
@@ -212,22 +209,16 @@ func worker(queue <-chan string, results chan<- ImageResponse) {
     }
 }
 
-func buildMosaic(mr *MosRequest){
-
+func fitMosaic(rgba *image.RGBA, tiles []MosImage) MosResult {
+	
 	var dx = TILE_X_RESOLUTION
 	var dy = TILE_Y_RESOLUTION
-	rgba:=mr.Image
 	
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
 	outscalex:=TILE_X/TILE_X_RESOLUTION
 	outscaley:=TILE_Y/TILE_Y_RESOLUTION
-	
-	//out:=downsample(rgba, image.Rect(0,0,width/outscalex,height/outscaley))
-	//mosaic := image.NewRGBA(image.Rect(0,0,width*MOSAIC_SCALE,height*MOSAIC_SCALE))
-	
-	//images:=flickrdownload(mr)	
 	
 	downx:=width/outscalex
 	downy:=height/outscaley
@@ -237,12 +228,6 @@ func buildMosaic(mr *MosRequest){
 	
 	out:=downsample(rgba, image.Rect(0,0,downx,downy))
 	mosaic := image.NewRGBA(image.Rect(0,0,mosaicx,mosaicy))
-	
-	mr.Progress<-"downloading source images"
-	var urls []string = flickrSearch(500,mr.Terms...)
-	
-	dict:=downloadImages(urls)
-	mr.Progress<-"building mosaic"
 	
 	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
 		
@@ -254,7 +239,7 @@ func buildMosaic(mr *MosRequest){
 			var match int = -1
 			var matches []int
 			
-			for v,mi := range dict {	
+			for v,mi := range tiles {	
 									
 				if mi.Uses<4 || coinFlip(){				
 					var dif float64 = 0
@@ -272,7 +257,7 @@ func buildMosaic(mr *MosRequest){
 						min = dif
 					}
 					
-					if dif<120.0 {
+					if dif<MAX_DIFFERENCE {
 						matches=append(matches,v)
 					}				
 				}				
@@ -282,22 +267,32 @@ func buildMosaic(mr *MosRequest){
 				match = matches[rand.Intn(len(matches))]
 			}
 			
-			img = dict[match].Image
-			dict[match].Uses++
+			img = tiles[match].Image
+			tiles[match].Uses++
 							
 			draw.Draw(mosaic, image.Rect(TILE_SCALE*i/TILE_X_RESOLUTION,TILE_SCALE*j/TILE_Y_RESOLUTION,TILE_SCALE*i/TILE_X_RESOLUTION+TILE_SCALE,TILE_SCALE*j/TILE_X_RESOLUTION+TILE_SCALE), img, img.Bounds().Min, draw.Src)
 					
 		}
 	}
 		
-	var b bytes.Buffer		
-	mr.Progress<-"downloading mosaic"
+	var b bytes.Buffer	
 	
 	jpeg.Encode(&b,mosaic,nil)
-	//png.Encode(&b, mosaic)
-	mr.Result <- MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
+	return MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
+	
 }
 
+func buildMosaic(mr *MosRequest) MosResult{
+	
+	mr.Progress<-"downloading source images"
+	var urls []string = flickrSearch(500,mr.Terms...)
+	
+	tiles:=downloadImages(urls)
+	mr.Progress<-"building mosaic"
+	
+	return fitMosaic(mr.Image,tiles)
+	
+}
 
 func main(){
 	
@@ -309,7 +304,9 @@ func main(){
 	    //var mr *MosRequest;
       select {
     	case mr := <-MosQueue:
-				buildMosaic(mr)
+				mosaic:=buildMosaic(mr)
+				mr.Progress<-"downloading mosaic"
+				mr.Result<-mosaic
       }
 	  }
  	}()
