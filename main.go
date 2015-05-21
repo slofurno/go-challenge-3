@@ -227,12 +227,19 @@ func buildMosaic(mr *MosRequest){
 	outscalex:=TILE_X/TILE_X_RESOLUTION
 	outscaley:=TILE_Y/TILE_Y_RESOLUTION
 	
-	out:=downsample(rgba, image.Rect(0,0,width/outscalex,height/outscaley))
-	mosaic := image.NewRGBA(image.Rect(0,0,width*MOSAIC_SCALE,height*MOSAIC_SCALE))
+	//out:=downsample(rgba, image.Rect(0,0,width/outscalex,height/outscaley))
+	//mosaic := image.NewRGBA(image.Rect(0,0,width*MOSAIC_SCALE,height*MOSAIC_SCALE))
 	
 	//images:=flickrdownload(mr)	
 	
+	downx:=width/outscalex
+	downy:=height/outscaley
 	
+	mosaicx:=downx*MOSAIC_SCALE*(TILE_X/TILE_X_RESOLUTION)
+	mosaicy:=downy*MOSAIC_SCALE*(TILE_Y/TILE_Y_RESOLUTION)
+	
+	out:=downsample(rgba, image.Rect(0,0,downx,downy))
+	mosaic := image.NewRGBA(image.Rect(0,0,mosaicx,mosaicy))
 	
 	mr.Progress<-"downloading source images"
 	var urls []string = flickrSearch(500,mr.Terms...)
