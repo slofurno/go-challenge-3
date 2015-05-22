@@ -1,3 +1,3 @@
 *.exe
-/images
-/thumbs
+/static/images
+/static/thumbs
