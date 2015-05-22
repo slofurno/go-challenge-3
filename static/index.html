@@ -8,7 +8,7 @@
 
 <!---- <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"></canvas> ---->
 <div style="min-width:300px;min-height:200px;background-color:ghostwhite;">
-<IMG id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"/>
+<IMG id="myCanvas" style="width:auto;height:200px;background-color:ghostwhite"/>
 
 </div>
  <br>
@@ -46,7 +46,7 @@ direct link: <input id="imagelink" type="text"><br>
 
   <script>
 
-  var curwidth = 600;
+  var curheight = 200;
 
   document.getElementById("myCanvas").addEventListener("mousedown",function(e){
 
@@ -55,12 +55,12 @@ direct link: <input id="imagelink" type="text"><br>
     }
 
     if (!e.ctrlKey){
-      curwidth+=200;
-    }else if(curwidth>200){
-      curwidth-=200;
+      curheight+=200;
+    }else if(curheight>200){
+      curheight-=200;
     }
 
-    document.getElementById('myCanvas').style.width = curwidth + 'px';
+    document.getElementById('myCanvas').style.height = curheight + 'px';
 
   });
 
@@ -76,21 +76,16 @@ direct link: <input id="imagelink" type="text"><br>
     canvas.height=height;
     var context = canvas.getContext('2d');
 
-    // load image
     context.drawImage(image, 0, 0); 
 }
 
   function listen(key){
-
     var evtSource = new EventSource("listen?key="+key);
-
     evtSource.onerror=function(e){
-      evtSource.close();
-      //console.log(e);
+      evtSource.close();     
     }
    
-    evtSource.addEventListener("progress", function(e) {
-     
+    evtSource.addEventListener("progress", function(e) {     
       setStatus(e.data);
      
     }, false);
@@ -99,8 +94,7 @@ direct link: <input id="imagelink" type="text"><br>
     evtSource.addEventListener("image", function(e) {
       var blob = new Blob([e.data], {type: 'image/jpg'});
       var url = URL.createObjectURL(blob);
-      document.getElementById("imagelink").value= window.location.href + "images/" + key + ".jpg";
-      
+      document.getElementById("imagelink").value= window.location.href + "images/" + key + ".jpg";      
 
       document.getElementById("myCanvas").src='data:image/jpeg;base64,'+JSON.parse(e.data);
       evtSource.close();
@@ -150,36 +144,20 @@ direct link: <input id="imagelink" type="text"><br>
 
       var el = document.getElementById("imageinput");
       var files = el.files;
-
       reader = new FileReader();
 
       reader.onload = function (e) {
-
         var buffer = e.target.result;
-
-        console.log(e);
-
         var dv = new Int8Array(buffer, 0);
-
         var xhr = new XMLHttpRequest;
+
         xhr.open("POST", "/postimage"+terms, true);
-
         xhr.onload = function () {
-
-          //console.log(this.response);
           listen(this.response) 
-
         };
-
         xhr.send(dv);
-
-      };
-
-      console.log(files[0]);
-
+      };     
       reader.readAsArrayBuffer(files[0]);
-
-
     }
 
     var publicmosaics = document.getElementById("publicmosaics");
