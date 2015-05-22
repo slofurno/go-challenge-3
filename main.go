@@ -180,14 +180,24 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 func saveImage(img *image.RGBA, fn string) {
 	
 	f,err := os.OpenFile(fn,os.O_CREATE, 0666)
-	defer f.Close()
+	
+	
+	defer func() { 
+    if err := f.Close(); err != nil {
+         fmt.Println(err)
+    }
+	}()
 	
 	if err != nil{
 		fmt.Println(err)
 		return
 	}
 	
-	png.Encode(f, img)
+	err = png.Encode(f, img)
+		if err != nil{
+		fmt.Println(err)
+		return
+	}
 	
 }
 
