@@ -12,6 +12,8 @@
  <br>
 
   <div style="background-color:ghostwhite;display:inline-block">
+    direct link: <input id="imagelink" type="text"><br><br>
+
     <input type="file" id="imageinput"><br>
    
     <input type="button" role="button" value="submit" onclick="handleFiles()"><br>
@@ -19,7 +21,7 @@
     
 </div>
  <div style="background-color:ghostwhite;display:inline-block">
- <p>mosaic tile search terms</p>
+ <p>mosaic tile search filters</p>
  <input class="tagname" type="text" placeholder="kitten"><br>
  <input class="tagname" type="text" placeholder="corvette"><br>
  <input class="tagname" type="text" placeholder="mountain"><br>
@@ -73,7 +75,6 @@
     context.drawImage(image, 0, 0); 
 }
 
-
   function listen(key){
 
     var evtSource = new EventSource("listen?key="+key);
@@ -93,6 +94,8 @@
     evtSource.addEventListener("image", function(e) {
       var blob = new Blob([e.data], {type: 'image/png'});
       var url = URL.createObjectURL(blob);
+      document.getElementById("imagelink").value= window.location.href + "images/" + key + ".png";
+      
 
       document.getElementById("myCanvas").src='data:image/jpeg;base64,'+JSON.parse(e.data);
       evtSource.close();

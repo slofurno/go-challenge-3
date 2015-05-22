@@ -179,8 +179,14 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 
 func saveImage(img *image.RGBA, fn string) {
 	
-	f,_ := os.OpenFile(fn,os.O_CREATE, 0666)
+	f,err := os.OpenFile(fn,os.O_CREATE, 0666)
 	defer f.Close()
+	
+	if err != nil{
+		fmt.Println(err)
+		return
+	}
+	
 	png.Encode(f, img)
 	
 }
@@ -208,8 +214,10 @@ func randomString(l int ) string {
 
 func init(){
 	rand.Seed( time.Now().UTC().UnixNano())
+			
+	f,err := os.Open("static/images")//File("static/images",os.O_CREATE, 0666)
+	defer f.Close()
 	
-	f,err:= os.Open("static/images")
 	if err!=nil {
 		return
 	}
@@ -351,7 +359,7 @@ func main(){
  
 	http.HandleFunc("/postimage", postimage)
 	http.HandleFunc("/listen", listen)
-	http.HandleFunc("/images",getImages)
+	http.HandleFunc("/api/images",getImages)
 	http.Handle("/", http.FileServer(http.Dir("static")))
 	http.ListenAndServe(":555", nil)
 
