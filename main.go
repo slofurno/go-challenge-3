@@ -145,7 +145,7 @@ func listen(w http.ResponseWriter, req *http.Request) {
 		
 }
 
-func postimage(w http.ResponseWriter, req *http.Request) {
+func postImage(w http.ResponseWriter, req *http.Request) {
 	
 	
 	defer req.Body.Close()
@@ -402,7 +402,7 @@ func main(){
  	}()
 	
  
-	http.HandleFunc("/postimage", postimage)
+	http.HandleFunc("/postimage", postImage)
 	http.HandleFunc("/listen", listen)
 	http.HandleFunc("/api/images",getImages)
 	http.Handle("/", http.FileServer(http.Dir("static")))

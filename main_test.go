@@ -3,7 +3,7 @@ package main
 
 import (
 
-	"fmt"
+//	"fmt"
 	"strconv"
 	"image/color"
 	"image/draw"
@@ -66,6 +66,8 @@ func TestConvert(t *testing.T) {
 func TestFit (t *testing.T){
 	//TODO how to fuzzy compare two images
 	
+	rand.Seed(843534431)
+	
 	org,_:=openImage("test/testfit.png")
 	var tiles []MosImage
 	const DIR = "testtiles"
@@ -82,46 +84,17 @@ func TestFit (t *testing.T){
 		}
 		
 		mr:=NewMosImage(m)
-		tiles = append(tiles,mr)
-		
-		
-		
+		tiles = append(tiles,mr)		
 	}
-	
+		
 	src,_:=openImage("test/bm.jpg")
+	mosaic:=fitMosaic(src,tiles)	
 	
-	mr:=fitMosaic(src,tiles)	
-	tevs,_,_ := image.Decode(mr.Mosaic)
-	
-	t1:=convertImage(tevs)
-	
-	if !isImageEqualFuzzy(t1,org){
-		t.Error("not eql")
+	if !isImageEqual(mosaic,org){
+		t.Error("fit mosaic does not match original")
 	}
+		//saveImage(mosaic, "testtest.png")
 	
-	out:=convertImage(tevs)	
-	saveImage(out, "testtest.png")
-	
-}
-
-func isImageEqualFuzzy(m1 *image.RGBA, m2 *image.RGBA) bool{
-	
-	if m1.Bounds().Max.X != m2.Bounds().Max.X || m1.Bounds().Max.Y != m2.Bounds().Max.Y {
-		return false
-	}
-	
-	c1 := averageColor(m1,m1.Bounds())
-	c2:=averageColor(m2,m2.Bounds())
-	
-	dif:=(c1.R-c2.R)*(c1.R-c2.R) + (c1.G-c2.G)*(c1.G-c2.G) + (c1.B-c2.B)*(c1.B-c2.B)
-	
-	fmt.Println("dif: ", dif)
-	
-	if dif >= 9 {
-		return false
-	}
-	
-	return true
 }
 
 func isImageEqual(m1 image.Image, m2 image.Image) bool{
@@ -129,9 +102,7 @@ func isImageEqual(m1 image.Image, m2 image.Image) bool{
 	if m1.Bounds().Max.X != m2.Bounds().Max.X || m1.Bounds().Max.Y != m2.Bounds().Max.Y {
 		return false
 	}
-	
-	dif:=0
-	
+		
 	for i:=0;i<m1.Bounds().Max.X;i++ {
 		for j:=0;j<m1.Bounds().Max.Y;j++ {
 			
@@ -139,20 +110,15 @@ func isImageEqual(m1 image.Image, m2 image.Image) bool{
 			r2,g2,b2,_:= m2.At(i,j).RGBA()
 			
 			if r1!=r2 || g1!=g2 || b1!=b2 {
-				dif++
-			}
-			
+				return false
+			}			
 		}
-	}
-	
-	fmt.Println("count: ",dif," ?? ", m1.Bounds().Max.X*m1.Bounds().Max.Y)
-	
+	}	
 	return true
 }
 
 func generateTiles (){
-	
-	
+		
 	for i:= 0; i < 100; i++ {
 		
 		x:=rand.Intn(400)+64
@@ -164,16 +130,10 @@ func generateTiles (){
 		
 		c := color.RGBA{r, g, b, 255}
 		
-		tile:= image.NewRGBA(image.Rect(0,0,x,y))
-		
-		draw.Draw(tile, tile.Bounds(), &image.Uniform{c}, image.ZP, draw.Src)
-		
-		saveImage(tile,"testtiles/"+strconv.Itoa(i)+".png")
-		
-		
+		tile:= image.NewRGBA(image.Rect(0,0,x,y))		
+		draw.Draw(tile, tile.Bounds(), &image.Uniform{c}, image.ZP, draw.Src)		
+		saveImage(tile,"testtiles/"+strconv.Itoa(i)+".png")	
 	}
-	
-	
 	
 }
 
@@ -185,12 +145,13 @@ func TestDownSample(t *testing.T){
 		t.Error(err)
 		return
 	}
-	//m2,err := openImage("test/sample.jpg")
-	
+	org,err := openImage("test/downsample.png")	
 	
 	down := downsample(m1,image.Rect(0,0,m1.Bounds().Max.X/2,m1.Bounds().Max.Y/2))
+	//saveImage(down,"test/downsample.png")
 	
-	saveImage(down,"test/downsample.png")
-	
+		if !isImageEqual(down,org){
+		t.Error("downsampled does not match original")
+	}
 	
 }
