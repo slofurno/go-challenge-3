@@ -52,6 +52,8 @@ type MosRequest struct {
 	Progress chan string
 	Result chan *image.RGBA
 	Save bool
+	Start time.Time
+	End time.Time
 }
 
 type ImageResponse struct{
@@ -68,7 +70,7 @@ func NewMosRequest(img *image.RGBA, terms []string, tosave bool) *MosRequest {
 	r.Progress = make(chan string, 15)
 	r.Result = make(chan *image.RGBA, 1)
 	r.Save=tosave
-		
+	
 	return r
 }
 
@@ -337,7 +339,11 @@ func buildMosaic(mr *MosRequest) *image.RGBA{
 	tiles:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
 	
+	mr.Start = time.Now()
 	return fitMosaic(mr.Image,tiles)
+	
+	
+	
 	
 }
 
@@ -352,6 +358,9 @@ func main(){
       select {
     	case mr := <-MosQueue:
 				mosaic:=buildMosaic(mr)
+				mr.End= time.Now()
+				
+				fmt.Println("elapsed time: ", mr.End.Sub(mr.Start))
 				mr.Progress<-"downloading mosaic"
 				
 				if mr.Save {
