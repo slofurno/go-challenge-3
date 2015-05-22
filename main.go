@@ -179,6 +179,30 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 
 }
 
+func saveJPG(img *image.RGBA, fn string) {
+	
+	f,err := os.OpenFile(fn,os.O_CREATE|os.O_RDWR, 0666)
+	
+	
+	defer func() { 
+    if err := f.Close(); err != nil {
+         fmt.Println(err)
+    }
+	}()
+	
+	if err != nil{
+		fmt.Println(err)
+		return
+	}
+	
+	err = jpeg.Encode(f, img,nil)
+		if err != nil{
+		fmt.Println(err)
+		return
+	}
+	
+}
+
 func saveImage(img *image.RGBA, fn string) {
 	
 	f,err := os.OpenFile(fn,os.O_CREATE|os.O_RDWR, 0666)
@@ -367,10 +391,10 @@ func main(){
 				
 				if mr.Save {
 					fmt.Println("saving mosaic...")
-					saveImage(mosaic,"static/images/"+mr.Key+".png")
-					SavedMosaics=append(SavedMosaics,mr.Key+".png")
+					saveJPG(mosaic,"static/images/"+mr.Key+".jpg")
+					SavedMosaics=append(SavedMosaics,mr.Key+".jpg")
 					thumb:=downsample(mosaic,image.Rect(0,0,300,300))
-					saveImage(thumb,"static/thumbs/"+mr.Key+".png")
+					saveJPG(thumb,"static/thumbs/"+mr.Key+".jpg")
 				}
 				mr.Result<-mosaic
       }
