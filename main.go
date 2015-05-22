@@ -179,7 +179,7 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 
 func saveImage(img *image.RGBA, fn string) {
 	
-	f,err := os.OpenFile(fn,os.O_CREATE, 0666)
+	f,err := os.OpenFile(fn,os.O_CREATE|os.O_RDWR, 0666)
 	
 	
 	defer func() { 
