@@ -8,14 +8,13 @@
 
 <!---- <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"></canvas> ---->
 <div style="min-width:300px;min-height:200px;background-color:ghostwhite;">
-<IMG id="myCanvas" style="width:auto;height:200px;background-color:ghostwhite"/>
-
+<IMG id="myCanvas" style="width:auto;height:200px;background-color:ghostwhite"/><br>
+<span id="directlink"></span>
 </div>
  <br>
  <div style="display:inline-block;vertical-align:top;margin-right:20px;">
 
- <div id="status">Select an image and enter up to 3 tile tags</div><br>
-direct link: <input id="imagelink" type="text"><br>
+ <div id="status">Select an image and enter up to 3 tile tags</div>
 <ul>
 <li>left click mosaic to zoom-in</li>
 <li>ctrl+left click to zoom-out</li>
@@ -94,7 +93,7 @@ direct link: <input id="imagelink" type="text"><br>
     evtSource.addEventListener("image", function(e) {
       var blob = new Blob([e.data], {type: 'image/jpg'});
       var url = URL.createObjectURL(blob);
-      document.getElementById("imagelink").value= window.location.href + "images/" + key + ".jpg";      
+      document.getElementById("directlink").innerHTML= window.location.href + "images/" + key + ".jpg";  
 
       document.getElementById("myCanvas").src='data:image/jpeg;base64,'+JSON.parse(e.data);
       evtSource.close();
