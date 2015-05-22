@@ -2,6 +2,7 @@
 package main
 
 import (
+	"strconv"
 	"runtime"
 	"image/jpeg"
 	"encoding/json"
@@ -49,7 +50,8 @@ type MosRequest struct {
 	Id int
 	Terms []string
 	Progress chan string
-	Result chan MosResult
+	Result chan *image.RGBA
+	Save bool
 }
 
 type ImageResponse struct{
@@ -58,13 +60,14 @@ type ImageResponse struct{
 		Err error	
 }
 
-func NewMosRequest(image *image.RGBA, terms []string) *MosRequest {
+func NewMosRequest(img *image.RGBA, terms []string, tosave bool) *MosRequest {
 	
 	r:=&MosRequest{}
-	r.Image=image
+	r.Image=img
 	r.Terms=terms
 	r.Progress = make(chan string, 15)
-	r.Result = make(chan MosResult, 1)
+	r.Result = make(chan *image.RGBA, 1)
+	r.Save=tosave
 		
 	return r
 }
@@ -74,16 +77,17 @@ type MosProgress struct {
 	Percent int
 }
 
-type MosResult struct {
-	
-	Mosaic *bytes.Buffer
-	Width int
-	Height int
-	
-}
 
 var MosRequests = make(map[string]*MosRequest)
 var MosQueue = make(chan *MosRequest, 100)
+var SavedMosaics []string
+
+func getImages(w http.ResponseWriter, req *http.Request) {
+	
+	r,_:=json.Marshal(SavedMosaics)
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Write([]byte(r))
+}
 
 func listen(w http.ResponseWriter, req *http.Request) {
 	
@@ -115,11 +119,15 @@ func listen(w http.ResponseWriter, req *http.Request) {
 			rw.Write([]byte("data: " + msg+"\n\n"))
 			rw.Flush()
 			
-			case result := <-mr.Result:
+			case mosaic := <-mr.Result:
+			
+			var b bytes.Buffer	
+	
+			jpeg.Encode(&b,mosaic,nil)
 			
 			//str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
 			//json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
-			bb,_:= json.Marshal(result.Mosaic.Bytes())		
+			bb,_:= json.Marshal(b.Bytes())		
 			
 			rw.Write([]byte("event: image\n"))
 			rw.Write([]byte("data: "))
@@ -153,8 +161,10 @@ func postimage(w http.ResponseWriter, req *http.Request) {
 	
 	qs:=req.URL.Query()
 	terms:= qs["terms"]
+	var tosave bool = false
+	tosave,err=strconv.ParseBool(qs.Get("save"))
 		
-	mr := NewMosRequest(rgba,terms)
+	mr := NewMosRequest(rgba,terms,tosave)
 	mr.Key=randomString(16)
 	
 	MosRequests[mr.Key] = mr
@@ -197,7 +207,23 @@ func randomString(l int ) string {
 
 
 func init(){
-	 rand.Seed( time.Now().UTC().UnixNano())
+	rand.Seed( time.Now().UTC().UnixNano())
+	
+	f,err:= os.Open("static/images")
+	if err!=nil {
+		return
+	}
+	
+	fi,err:=f.Readdir(200)
+	
+	if err!=nil {
+		return
+	}
+	
+	for _,file:=range fi{
+		SavedMosaics=append(SavedMosaics,file.Name())
+	}
+	
 }
 
 func worker(queue <-chan string, results chan<- ImageResponse) {
@@ -209,7 +235,7 @@ func worker(queue <-chan string, results chan<- ImageResponse) {
     }
 }
 
-func fitMosaic(rgba *image.RGBA, tiles []MosImage) MosResult {
+func fitMosaic(rgba *image.RGBA, tiles []MosImage) *image.RGBA {
 	
 	var dx = TILE_X_RESOLUTION
 	var dy = TILE_Y_RESOLUTION
@@ -274,15 +300,18 @@ func fitMosaic(rgba *image.RGBA, tiles []MosImage) MosResult {
 					
 		}
 	}
-		
+	
+	
+	return mosaic
+	/*	
 	var b bytes.Buffer	
 	
 	jpeg.Encode(&b,mosaic,nil)
 	return MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
-	
+	*/
 }
 
-func buildMosaic(mr *MosRequest) MosResult{
+func buildMosaic(mr *MosRequest) *image.RGBA{
 	
 	mr.Progress<-"downloading source images"
 	var urls []string = flickrSearch(500,mr.Terms...)
@@ -306,6 +335,14 @@ func main(){
     	case mr := <-MosQueue:
 				mosaic:=buildMosaic(mr)
 				mr.Progress<-"downloading mosaic"
+				
+				if mr.Save {
+					fmt.Println("saving mosaic...")
+					saveImage(mosaic,"static/images/"+mr.Key+".png")
+					SavedMosaics=append(SavedMosaics,mr.Key+".png")
+					thumb:=downsample(mosaic,image.Rect(0,0,100,100))
+					saveImage(thumb,"static/thumbs/"+mr.Key+".png")
+				}
 				mr.Result<-mosaic
       }
 	  }
@@ -314,6 +351,7 @@ func main(){
  
 	http.HandleFunc("/postimage", postimage)
 	http.HandleFunc("/listen", listen)
+	http.HandleFunc("/images",getImages)
 	http.Handle("/", http.FileServer(http.Dir("static")))
 	http.ListenAndServe(":555", nil)
 

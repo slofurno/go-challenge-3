@@ -2,6 +2,7 @@
 package main
 
 import (
+
 	"fmt"
 	"strconv"
 	"image/color"
@@ -63,13 +64,14 @@ func TestConvert(t *testing.T) {
 }
 
 func TestFit (t *testing.T){
+	//TODO how to fuzzy compare two images
 	
 	org,_:=openImage("test/testfit.png")
 	var tiles []MosImage
 	const DIR = "testtiles"
 	
 	dir,_:=os.Open(DIR)
-	fi,_ :=dir.Readdir(100)
+	fi,_ :=dir.Readdir(200)
 	
 	for _,f:=range fi {
 		
@@ -91,13 +93,35 @@ func TestFit (t *testing.T){
 	mr:=fitMosaic(src,tiles)	
 	tevs,_,_ := image.Decode(mr.Mosaic)
 	
-	if !isImageEqual(tevs,org){
+	t1:=convertImage(tevs)
+	
+	if !isImageEqualFuzzy(t1,org){
 		t.Error("not eql")
 	}
 	
 	out:=convertImage(tevs)	
 	saveImage(out, "testtest.png")
 	
+}
+
+func isImageEqualFuzzy(m1 *image.RGBA, m2 *image.RGBA) bool{
+	
+	if m1.Bounds().Max.X != m2.Bounds().Max.X || m1.Bounds().Max.Y != m2.Bounds().Max.Y {
+		return false
+	}
+	
+	c1 := averageColor(m1,m1.Bounds())
+	c2:=averageColor(m2,m2.Bounds())
+	
+	dif:=(c1.R-c2.R)*(c1.R-c2.R) + (c1.G-c2.G)*(c1.G-c2.G) + (c1.B-c2.B)*(c1.B-c2.B)
+	
+	fmt.Println("dif: ", dif)
+	
+	if dif >= 9 {
+		return false
+	}
+	
+	return true
 }
 
 func isImageEqual(m1 image.Image, m2 image.Image) bool{

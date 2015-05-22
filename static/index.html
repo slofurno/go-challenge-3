@@ -15,10 +15,11 @@
     <input type="file" id="imageinput"><br>
    
     <input type="button" role="button" value="submit" onclick="handleFiles()"><br>
+    <input id="savemosaic" type="checkbox">check if you want your mosaic saved and available for public display
     
 </div>
  <div style="background-color:ghostwhite;display:inline-block">
- <p>mosaic tiles</p>
+ <p>mosaic tile search terms</p>
  <input class="tagname" type="text" placeholder="kitten"><br>
  <input class="tagname" type="text" placeholder="corvette"><br>
  <input class="tagname" type="text" placeholder="mountain"><br>
@@ -118,6 +119,7 @@
     function handleFiles() {
 
       var t = document.getElementsByClassName("tagname");
+      var savemosaic = document.getElementById("savemosaic")
 
       var tags = [].slice.call(t).map(function(tag){
         return tag.value;
@@ -138,6 +140,8 @@
         }
         return cur+"terms=" + next;
       },"?");
+
+      terms+="&save="+savemosaic.checked.toString();
 
       var el = document.getElementById("imageinput");
       var files = el.files;
@@ -171,6 +175,18 @@
       reader.readAsArrayBuffer(files[0]);
 
 
+    }
+
+    function getMosaics() {
+      var xhr =new XMLHttpRequest;
+      xhr.open("GET","/images");
+      xhr.onload=function(){
+
+        var m = JSON.parse(this.response)
+
+        console.log(m)
+      }
+      xhr.send();
     }
 
 
