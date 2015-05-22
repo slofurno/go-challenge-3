@@ -339,7 +339,7 @@ func buildMosaic(mr *MosRequest) *image.RGBA{
 	tiles:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
 	
-	mr.Start = time.Now()
+	
 	return fitMosaic(mr.Image,tiles)
 	
 	
@@ -357,6 +357,8 @@ func main(){
 	    //var mr *MosRequest;
       select {
     	case mr := <-MosQueue:
+			
+				mr.Start = time.Now()
 				mosaic:=buildMosaic(mr)
 				mr.End= time.Now()
 				
@@ -367,7 +369,7 @@ func main(){
 					fmt.Println("saving mosaic...")
 					saveImage(mosaic,"static/images/"+mr.Key+".png")
 					SavedMosaics=append(SavedMosaics,mr.Key+".png")
-					thumb:=downsample(mosaic,image.Rect(0,0,100,100))
+					thumb:=downsample(mosaic,image.Rect(0,0,300,300))
 					saveImage(thumb,"static/thumbs/"+mr.Key+".png")
 				}
 				mr.Result<-mosaic

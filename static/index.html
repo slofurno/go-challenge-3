@@ -3,40 +3,45 @@
   <head>
     <meta charset="utf-8">
     <title>title</title>
-
   </head>
   <body>
 
 <!---- <canvas id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"></canvas> ---->
-<IMG id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite">
- <br>
+<div style="min-width:300px;min-height:200px;background-color:ghostwhite;">
+<IMG id="myCanvas" width="300" height="200" style="width:600px;height:auto;background-color:ghostwhite"/>
 
-  <div style="background-color:ghostwhite;display:inline-block">
-    direct link: <input id="imagelink" type="text"><br><br>
+</div>
+ <br>
+ <div style="display:inline-block;vertical-align:top;margin-right:20px;">
+
+ <div id="status">Select an image and enter up to 3 tile tags</div><br>
+direct link: <input id="imagelink" type="text"><br>
+<ul>
+<li>left click mosaic to zoom-in</li>
+<li>ctrl+left click to zoom-out</li>
+</ul>
+
+  <div style="background-color:ghostwhite;display:inline-block;padding:20px">
+
+    <p>mosaic tile search filters</p>
+   <input class="tagname" type="text" placeholder="kitten"><br>
+   <input class="tagname" type="text" placeholder="corvette"><br>
+   <input class="tagname" type="text" placeholder="mountain"><br>
+   <br>  
 
     <input type="file" id="imageinput"><br>
    
     <input type="button" role="button" value="submit" onclick="handleFiles()"><br>
-    <input id="savemosaic" type="checkbox">check if you want your mosaic saved and available for public display
+    <input id="savemosaic" type="checkbox">save my mosaic and make it public
     
 </div>
- <div style="background-color:ghostwhite;display:inline-block">
- <p>mosaic tile search filters</p>
- <input class="tagname" type="text" placeholder="kitten"><br>
- <input class="tagname" type="text" placeholder="corvette"><br>
- <input class="tagname" type="text" placeholder="mountain"><br>
+
 </div>
+<div id="publicmosaics" style="width:640px;min-height:100px;background-color:ghostwhite;display:inline-block;padding:20px;vertical-align:top;">
+
+</div>
+
 <br>
-<div id="status">Select an image and enter up to 3 tile tags</div>
-
-<ul>
-<li>select a png or jpg image</li>
-<li>enter 1-3 search terms for your mosaic tiles</li>
-<li>submit</li>
-<li>be patient as the mosaic downloads and renders</li>
-<li>left click the canvas to zoomin, ctrl+left click to zoom out</li>
-</ul>
-
 
 
   <script>
@@ -180,17 +185,39 @@
 
     }
 
+    var publicmosaics = document.getElementById("publicmosaics");
+
     function getMosaics() {
       var xhr =new XMLHttpRequest;
-      xhr.open("GET","/images");
+      xhr.open("GET","/api/images");
       xhr.onload=function(){
 
         var m = JSON.parse(this.response)
+
+        m.forEach(function(url){
+
+          var el = document.createElement("img");
+          el.src="thumbs/"+url;
+
+          var link = document.createElement("a");
+          link.href="images/"+url;
+          link.appendChild(el);
+
+          var div = document.createElement("div");
+          div.appendChild(link);
+          publicmosaics.appendChild(div);
+          div.style.display="inline-block";
+          div.style.margin="10px";
+                  
+
+        });
 
         console.log(m)
       }
       xhr.send();
     }
+
+    getMosaics();
 
 
   </script>
