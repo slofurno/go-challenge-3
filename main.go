@@ -2,6 +2,7 @@
 package main
 
 import (
+	"io"
 	"strconv"
 	"runtime"
 	"image/jpeg"
@@ -112,16 +113,29 @@ func listen(w http.ResponseWriter, req *http.Request) {
 		delete(MosRequests,key)
 	}
 	
+	disconnect:=make(chan bool, 1)
+	
+	go func(){
+		_,err := rw.ReadByte()
+		if err==io.EOF {
+			disconnect<-true
+		}
+	}()
+	
 	for {
 		
 		select{
-			case msg := <-mr.Progress:
+		case <-disconnect:
+			fmt.Println("disconnected")
+			return
+			
+		case msg := <-mr.Progress:
 			
 			rw.Write([]byte("event: progress\n"))
 			rw.Write([]byte("data: " + msg+"\n\n"))
 			rw.Flush()
 			
-			case mosaic := <-mr.Result:
+		case mosaic := <-mr.Result:
 			
 			var b bytes.Buffer	
 	
