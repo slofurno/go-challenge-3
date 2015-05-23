@@ -216,13 +216,24 @@ func fitMosaic(rgba *image.RGBA, tiles []mosImage) *image.RGBA {
 }
 
 func buildMosaic(mr *mosRequest) *image.RGBA{
+		
+	var src *image.RGBA = mr.Image
+	maxPixels := 480000
+	
+	for src.Bounds().Max.X*src.Bounds().Max.Y>maxPixels {
+		src = downsample(src, image.Rect(0,0, src.Bounds().Max.X/2, src.Bounds().Max.Y/2))
+	}
+		
+	
 	mr.Progress<-"downloading source images"
 	urls:= flickrSearch(500,mr.Terms...)
 	
 	tiles:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
+	
+	
 		
-	return fitMosaic(mr.Image,tiles)
+	return fitMosaic(src,tiles)
 }
 
 func main(){
