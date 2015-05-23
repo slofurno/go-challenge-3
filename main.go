@@ -99,6 +99,7 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	h, _ := w.(http.Hijacker)
 	conn, rw, _ := h.Hijack()
 	defer conn.Close()
+	
 	rw.Write([]byte("HTTP/1.1 200 OK\r\n"))
 	rw.Write([]byte("Content-Type: text/event-stream\r\n\r\n"))
 	rw.Flush()
