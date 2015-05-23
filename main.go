@@ -2,20 +2,15 @@
 package main
 
 import (
-	"io"
-	"strconv"
-	"runtime"
+
 	"image/jpeg"
-	"encoding/json"
 	"math/rand"
 	"time"
-	"bytes"
-	"io/ioutil"
+	"runtime"
 	"net/http"
 	"image"
 	"image/png"
 	"image/draw"
-	"log"
 	"fmt"
 	"os"
 	_ "image/png"
@@ -29,27 +24,14 @@ const (
 	tileYResolution =2
 	mosaicScale=8
 	maxColorDifference = 120.0
-	
+	alpha = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 )
 
-type mosRequest struct {
-	
-	Image *image.RGBA
-	Key string
-	Id int
-	Terms []string
-	Progress chan string
-	Result chan *image.RGBA
-	Save bool
-	Start time.Time
-	End time.Time
-}
 
-type imageResponse struct{
-	
-		Image image.Image
-		Err error	
-}
+
+var mosRequests = make(map[string]*mosRequest)
+var mosQueue = make(chan *mosRequest, 100)
+var savedMosaics []string
 
 func newMosRequest(img *image.RGBA, terms []string, tosave bool) *mosRequest {
 	
@@ -63,118 +45,6 @@ func newMosRequest(img *image.RGBA, terms []string, tosave bool) *mosRequest {
 	return r
 }
 
-
-var mosRequests = make(map[string]*mosRequest)
-var mosQueue = make(chan *mosRequest, 100)
-var savedMosaics []string
-
-func getImages(w http.ResponseWriter, req *http.Request) {
-	
-	r,_:=json.Marshal(savedMosaics)
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.Write([]byte(r))
-}
-
-func listen(w http.ResponseWriter, req *http.Request) {
-	
-	key := req.URL.Query().Get("key")
-		
-	h, _ := w.(http.Hijacker)
-	conn, rw, _ := h.Hijack()
-	defer conn.Close()
-	
-	rw.Write([]byte("HTTP/1.1 200 OK\r\n"))
-	rw.Write([]byte("Content-Type: text/event-stream\r\n\r\n"))
-	rw.Flush()
-	
-	var mr *mosRequest
-	var ok bool
-	
-	if mr, ok = mosRequests[key]; !ok {
-		fmt.Println("key not found")
-    return
-	}
-	delete(mosRequests,key)
-		
-	disconnect:=make(chan bool, 1)
-	
-	go func(){
-		_,err := rw.ReadByte()
-		if err==io.EOF {
-			disconnect<-true
-		}
-	}()
-	
-	for {
-		
-		select{
-		case <-disconnect:
-			fmt.Println("disconnected")
-			return
-			
-		case msg := <-mr.Progress:
-			
-			rw.Write([]byte("event: progress\n"))
-			rw.Write([]byte("data: " + msg+"\n\n"))
-			rw.Flush()
-			
-		case mosaic := <-mr.Result:
-			
-			var b bytes.Buffer	
-	
-			jpeg.Encode(&b,mosaic,nil)
-			
-			//str := base64.StdEncoding.EncodeToString(result.Mosaic.Bytes())
-			//json:= "{\"height\":" + strconv.Itoa(result.Height) + ",\"width\":" + strconv.Itoa(result.Width) + ",\"base64\":\""+str+ "\"}"
-			bb,_:= json.Marshal(b.Bytes())		
-			
-			rw.Write([]byte("event: image\n"))
-			rw.Write([]byte("data: "))
-			rw.Write(bb)
-			//rw.Write([]byte(json))
-			rw.Write([]byte("\n\n"))
-			rw.Flush()
-			return	
-			
-		}
-		
-	}
-		
-}
-
-func postImage(w http.ResponseWriter, req *http.Request) {
-	
-	
-	defer req.Body.Close()
-	buf, err := ioutil.ReadAll(req.Body)
-	buffer:=bytes.NewReader(buf)
-
-	m, _, err := image.Decode(buffer)
-	
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	
-	rgba := convertImage(m)
-	
-	qs:=req.URL.Query()
-	terms:= qs["terms"]
-	tosave:= false
-	tosave,err=strconv.ParseBool(qs.Get("save"))
-		
-	mr := newMosRequest(rgba,terms,tosave)
-	mr.Key=randomString(16)
-	
-	mosRequests[mr.Key] = mr
-	
-	mosQueue <- mr
-	mr.Progress<-"mosaic queued"
-
-	w.Write([]byte(mr.Key))
-	
-
-}
 
 func saveJPG(img *image.RGBA, fn string) {
 	
@@ -200,11 +70,11 @@ func saveJPG(img *image.RGBA, fn string) {
 	
 }
 
+//saves image to disk in png format
 func saveImage(img *image.RGBA, fn string) {
 	
 	f,err := os.OpenFile(fn,os.O_CREATE|os.O_RDWR, 0666)
-	
-	
+		
 	defer func() { 
     if err := f.Close(); err != nil {
          fmt.Println(err)
@@ -220,10 +90,10 @@ func saveImage(img *image.RGBA, fn string) {
 		if err != nil{
 		fmt.Println(err)
 		return
-	}
-	
+	}	
 }
 
+//true about 50% of the time
 func coinFlip() bool {
 	
 	if rand.Float64()>=.5 {
@@ -233,8 +103,10 @@ func coinFlip() bool {
 	
 }
 
-var alpha = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+
+//returns a string of length l, with chars randomly picked from the following
+//chars: abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789
 func randomString(l int ) string {
 	 
     bytes := make([]byte, l)
@@ -264,18 +136,17 @@ func init(){
 	for _,file:=range fi{
 		savedMosaics=append(savedMosaics,file.Name())
 	}
-	
 }
 
-func worker(queue <-chan string, results chan<- imageResponse) {
+//downloads images from urls in source queue, proceses them, and streams results
+func imageDownloader(queue <-chan string, results chan<- imageResponse) {
     for q := range queue {
-
 			m,err := downloadAndDecode(q)
-
       results <- imageResponse{Image:m,Err:err}
     }
 }
 
+//composes a mosaic from image tiles, to match a provided source RGBA image
 func fitMosaic(rgba *image.RGBA, tiles []mosImage) *image.RGBA {
 	
 	var dx = tileXResolution
@@ -340,37 +211,23 @@ func fitMosaic(rgba *image.RGBA, tiles []mosImage) *image.RGBA {
 			draw.Draw(mosaic, image.Rect(tileScale*i/tileXResolution,tileScale*j/tileYResolution,tileScale*i/tileXResolution+tileScale,tileScale*j/tileXResolution+tileScale), img, img.Bounds().Min, draw.Src)
 					
 		}
-	}
-	
-	
+	}	
 	return mosaic
-	/*	
-	var b bytes.Buffer	
-	
-	jpeg.Encode(&b,mosaic,nil)
-	return MosResult{Mosaic:&b, Height:mosaic.Bounds().Max.Y, Width:mosaic.Bounds().Max.X}
-	*/
 }
 
 func buildMosaic(mr *mosRequest) *image.RGBA{
-	
 	mr.Progress<-"downloading source images"
 	urls:= flickrSearch(500,mr.Terms...)
 	
 	tiles:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
-	
-	
+		
 	return fitMosaic(mr.Image,tiles)
-	
-	
-	
-	
 }
 
 func main(){
 	
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(2)
 		
   go func() {
 				

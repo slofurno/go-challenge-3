@@ -1,7 +1,7 @@
 package main
 
 import (
-
+	"time"
 	"math"
 	"strconv"
 	"io/ioutil"
@@ -13,6 +13,26 @@ import (
 		"log"
 	"image/color"
 )
+
+//holds all information regarding the state of our mosaic request
+type mosRequest struct {
+	
+	Image *image.RGBA
+	Key string
+	Id int
+	Terms []string
+	Progress chan string
+	Result chan *image.RGBA
+	Save bool
+	Start time.Time
+	End time.Time
+}
+
+type imageResponse struct{
+	
+		Image image.Image
+		Err error	
+}
 
 type mosImage struct {
 	
@@ -89,7 +109,7 @@ func downloadImages(urls []string) []mosImage {
   results := make(chan imageResponse, 200)
 	
 	for i := 0; i < 200; i++ {
-    go worker(queue, results)
+    go imageDownloader(queue, results)
   }
 	
 	go func(){
@@ -129,6 +149,8 @@ func downloadAndDecode(url string) (image.Image, error){
 	
 }
 
+//accepts a source image and a sub-rectangle, and returns the average of
+//the rgb colors within this rectangle
 func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	
 	var rSum float64
@@ -142,27 +164,23 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	
 	for i:=rect.Min.X; i<rect.Max.X;i++{
 		for j:=rect.Min.Y;j<rect.Max.Y;j++{
-			offset:=4*(j*stride+i)
-			
+			offset:=4*(j*stride+i)			
 			
 			rSum+= sRGBtoLinear(pixels[offset])
 			gSum+= sRGBtoLinear(pixels[offset+1])
 			bSum+= sRGBtoLinear(pixels[offset+2])
 
-			count++
-			
+			count++			
 		}
 	}
 			
 	return color.RGBA{lineartosRGB(rSum/count), lineartosRGB(gSum/count), lineartosRGB(bSum/count), 255}
-	
 }
 
+//downsamples a source image as close as possible to a desired size, while also
+//maintaining a linear downsampling ratio. 
 func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	
-	//determines the best fit rectangle with the same aspect ratio and a linear 
-	//downsample ratio and takes it from the center of our source image
-  
 	xratio := int(img.Bounds().Max.X/size.Max.X)
 	yratio:=int(img.Bounds().Max.Y/size.Max.Y)
 	
@@ -175,15 +193,12 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 	xoffset:= int((img.Bounds().Max.X - size.Max.X*minratio)/2)
 	yoffset:= int((img.Bounds().Max.Y - size.Max.Y*minratio)/2)
 		
-	//fmt.Println(xoffset,yoffset,minratio*size.Max.X,minratio*size.Max.Y)
-	
 	out := image.NewRGBA(size)
 	pixels := out.Pix
 	
 	for i:=0; i<size.Max.X;i++{
 		for j:=0;j<size.Max.Y;j++{
-			offset:=4*(j*size.Max.X+i)
-			
+			offset:=4*(j*size.Max.X+i)			
 			r:=image.Rect(i*minratio+xoffset, j*minratio+yoffset, (i+1)*minratio+xoffset, (j+1)*minratio+yoffset)
 					
 			c:=averageColor(img, r)
@@ -191,15 +206,13 @@ func downsample(img *image.RGBA, size image.Rectangle) *image.RGBA {
 			pixels[offset]=c.R
 			pixels[offset+1]=c.G
 			pixels[offset+2]=c.B
-			pixels[offset+3]=255
-			
+			pixels[offset+3]=255			
 		}
-	}
-	
+	}	
 	return out
-	
 }
 
+/*
 func lum(c *color.RGBA) float64 {
 	return float64(0.299*float32(c.R) + 0.587*float32(c.G) + 0.114*float32(c.B))
 }
@@ -208,11 +221,12 @@ func averageLum(img *image.RGBA, r image.Rectangle) float32 {
 	
 	c:=averageColor(img, r)	
 	lum:=0.299*float32(c.R) + 0.587*float32(c.G) + 0.114*float32(c.B)
-	
-	return lum
-	
+		
+	return lum	
 }
+*/
 
+//converts any type implmenting the image interface to a RGBA representation
 func convertToRGBA(src image.Image) *image.RGBA {
 	
 	dst:=image.NewRGBA(src.Bounds())
@@ -229,14 +243,13 @@ func convertToRGBA(src image.Image) *image.RGBA {
 			pix[4*c+2]=uint8(b1)
 			pix[4*c+3]=255
 			
-			c++
-			
+			c++			
 		}		
 	}	
 	return dst
 }
 
-
+//casts or converts any type implmenting interface image to the RGBA type
 func convertImage(m image.Image) *image.RGBA {
 	
 	var rgba *image.RGBA
