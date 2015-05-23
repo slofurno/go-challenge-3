@@ -69,7 +69,7 @@ func TestFit (t *testing.T){
 	rand.Seed(843534431)
 	
 	org,_:=openImage("test/testfit.png")
-	var tiles []MosImage
+	var tiles []mosImage
 	const DIR = "testtiles"
 	
 	dir,_:=os.Open(DIR)
@@ -83,7 +83,7 @@ func TestFit (t *testing.T){
 			t.Error(err)
 		}
 		
-		mr:=NewMosImage(m)
+		mr:=newMosImage(m)
 		tiles = append(tiles,mr)		
 	}
 		

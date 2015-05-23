@@ -7,12 +7,8 @@ import (
 	"runtime"
 	"image/jpeg"
 	"encoding/json"
-	//"encoding/base64"
-
 	"math/rand"
-//	"io"
 	"time"
-	//"strconv"
 	"bytes"
 	"io/ioutil"
 	"net/http"
@@ -27,24 +23,16 @@ import (
 )
 
 const (
-	TILE_X = 8
-	TILE_Y = 8
-	TILE_X_RESOLUTION =2
-	TILE_Y_RESOLUTION =2
-	MOSAIC_SCALE=8
-	MAX_DIFFERENCE = 120.0
+	tileWidth = 8
+	tileHeight = 8
+	tileXResolution =2
+	tileYResolution =2
+	mosaicScale=8
+	maxColorDifference = 120.0
 	
 )
 
-type ImageDto struct {
-	
-	Data string
-	Height int
-	Width int
-	
-}
-
-type MosRequest struct {
+type mosRequest struct {
 	
 	Image *image.RGBA
 	Key string
@@ -57,15 +45,15 @@ type MosRequest struct {
 	End time.Time
 }
 
-type ImageResponse struct{
+type imageResponse struct{
 	
 		Image image.Image
 		Err error	
 }
 
-func NewMosRequest(img *image.RGBA, terms []string, tosave bool) *MosRequest {
+func newMosRequest(img *image.RGBA, terms []string, tosave bool) *mosRequest {
 	
-	r:=&MosRequest{}
+	r:=&mosRequest{}
 	r.Image=img
 	r.Terms=terms
 	r.Progress = make(chan string, 15)
@@ -75,19 +63,14 @@ func NewMosRequest(img *image.RGBA, terms []string, tosave bool) *MosRequest {
 	return r
 }
 
-type MosProgress struct {
-	
-	Percent int
-}
 
-
-var MosRequests = make(map[string]*MosRequest)
-var MosQueue = make(chan *MosRequest, 100)
-var SavedMosaics []string
+var mosRequests = make(map[string]*mosRequest)
+var mosQueue = make(chan *mosRequest, 100)
+var savedMosaics []string
 
 func getImages(w http.ResponseWriter, req *http.Request) {
 	
-	r,_:=json.Marshal(SavedMosaics)
+	r,_:=json.Marshal(savedMosaics)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Write([]byte(r))
 }
@@ -104,16 +87,15 @@ func listen(w http.ResponseWriter, req *http.Request) {
 	rw.Write([]byte("Content-Type: text/event-stream\r\n\r\n"))
 	rw.Flush()
 	
-	var mr *MosRequest
+	var mr *mosRequest
 	var ok bool
 	
-	if mr, ok = MosRequests[key]; !ok {
+	if mr, ok = mosRequests[key]; !ok {
 		fmt.Println("key not found")
     return
-	}else{
-		delete(MosRequests,key)
 	}
-	
+	delete(mosRequests,key)
+		
 	disconnect:=make(chan bool, 1)
 	
 	go func(){
@@ -178,15 +160,15 @@ func postImage(w http.ResponseWriter, req *http.Request) {
 	
 	qs:=req.URL.Query()
 	terms:= qs["terms"]
-	var tosave bool = false
+	tosave:= false
 	tosave,err=strconv.ParseBool(qs.Get("save"))
 		
-	mr := NewMosRequest(rgba,terms,tosave)
+	mr := newMosRequest(rgba,terms,tosave)
 	mr.Key=randomString(16)
 	
-	MosRequests[mr.Key] = mr
+	mosRequests[mr.Key] = mr
 	
-	MosQueue <- mr
+	mosQueue <- mr
 	mr.Progress<-"mosaic queued"
 
 	w.Write([]byte(mr.Key))
@@ -280,54 +262,54 @@ func init(){
 	}
 	
 	for _,file:=range fi{
-		SavedMosaics=append(SavedMosaics,file.Name())
+		savedMosaics=append(savedMosaics,file.Name())
 	}
 	
 }
 
-func worker(queue <-chan string, results chan<- ImageResponse) {
+func worker(queue <-chan string, results chan<- imageResponse) {
     for q := range queue {
 
-			m,err := downloadanddecode(q)
+			m,err := downloadAndDecode(q)
 
-      results <- ImageResponse{Image:m,Err:err}
+      results <- imageResponse{Image:m,Err:err}
     }
 }
 
-func fitMosaic(rgba *image.RGBA, tiles []MosImage) *image.RGBA {
+func fitMosaic(rgba *image.RGBA, tiles []mosImage) *image.RGBA {
 	
-	var dx = TILE_X_RESOLUTION
-	var dy = TILE_Y_RESOLUTION
+	var dx = tileXResolution
+	var dy = tileYResolution
 	
 	height:=rgba.Bounds().Max.Y
 	width:=rgba.Bounds().Max.X
 	
-	outscalex:=TILE_X/TILE_X_RESOLUTION
-	outscaley:=TILE_Y/TILE_Y_RESOLUTION
+	outscalex:=tileWidth/tileXResolution
+	outscaley:=tileHeight/tileYResolution
 	
 	downx:=width/outscalex
 	downy:=height/outscaley
 	
-	mosaicx:=downx*MOSAIC_SCALE*(TILE_X/TILE_X_RESOLUTION)
-	mosaicy:=downy*MOSAIC_SCALE*(TILE_Y/TILE_Y_RESOLUTION)
+	mosaicx:=downx*mosaicScale*(tileWidth/tileXResolution)
+	mosaicy:=downy*mosaicScale*(tileHeight/tileYResolution)
 	
 	out:=downsample(rgba, image.Rect(0,0,downx,downy))
 	mosaic := image.NewRGBA(image.Rect(0,0,mosaicx,mosaicy))
 	
-	const TILE_SCALE = TILE_Y*MOSAIC_SCALE
+	const tileScale = tileHeight*mosaicScale
 		
 	for j:=0;j<out.Bounds().Max.Y;j+=dy {
 		for i:=0;i<out.Bounds().Max.X;i+=dx {
 						
 			var min float64 =999999
 			var img *image.RGBA
-			var match int = -1
+			match:= -1
 			var matches []int
 			
 			for v,mi := range tiles {	
 									
 				if mi.Uses<4 || coinFlip(){				
-					var dif float64 = 0
+					var dif float64
 					
 					for dj:=0;dj<dy;dj++ {
 						for di:=0;di<dx;di++ {							
@@ -342,7 +324,7 @@ func fitMosaic(rgba *image.RGBA, tiles []MosImage) *image.RGBA {
 						min = dif
 					}
 					
-					if dif<MAX_DIFFERENCE {
+					if dif<maxColorDifference {
 						matches=append(matches,v)
 					}				
 				}				
@@ -355,7 +337,7 @@ func fitMosaic(rgba *image.RGBA, tiles []MosImage) *image.RGBA {
 			img = tiles[match].Image
 			tiles[match].Uses++
 							
-			draw.Draw(mosaic, image.Rect(TILE_SCALE*i/TILE_X_RESOLUTION,TILE_SCALE*j/TILE_Y_RESOLUTION,TILE_SCALE*i/TILE_X_RESOLUTION+TILE_SCALE,TILE_SCALE*j/TILE_X_RESOLUTION+TILE_SCALE), img, img.Bounds().Min, draw.Src)
+			draw.Draw(mosaic, image.Rect(tileScale*i/tileXResolution,tileScale*j/tileYResolution,tileScale*i/tileXResolution+tileScale,tileScale*j/tileXResolution+tileScale), img, img.Bounds().Min, draw.Src)
 					
 		}
 	}
@@ -370,10 +352,10 @@ func fitMosaic(rgba *image.RGBA, tiles []MosImage) *image.RGBA {
 	*/
 }
 
-func buildMosaic(mr *MosRequest) *image.RGBA{
+func buildMosaic(mr *mosRequest) *image.RGBA{
 	
 	mr.Progress<-"downloading source images"
-	var urls []string = flickrSearch(500,mr.Terms...)
+	urls:= flickrSearch(500,mr.Terms...)
 	
 	tiles:=downloadImages(urls)
 	mr.Progress<-"building mosaic"
@@ -395,7 +377,7 @@ func main(){
 	  for {
 	    //var mr *MosRequest;
       select {
-    	case mr := <-MosQueue:
+    	case mr := <-mosQueue:
 			
 				mr.Start = time.Now()
 				mosaic:=buildMosaic(mr)
@@ -407,7 +389,7 @@ func main(){
 				if mr.Save {
 					fmt.Println("saving mosaic...")
 					saveJPG(mosaic,"static/images/"+mr.Key+".jpg")
-					SavedMosaics=append(SavedMosaics,mr.Key+".jpg")
+					savedMosaics=append(savedMosaics,mr.Key+".jpg")
 					thumb:=downsample(mosaic,image.Rect(0,0,300,300))
 					saveJPG(thumb,"static/thumbs/"+mr.Key+".jpg")
 				}

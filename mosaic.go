@@ -1,26 +1,20 @@
 package main
 
 import (
-	//"reflect"
-	//"errors"
-//	"io"
-	"math"
-	//"sync"
 
+	"math"
 	"strconv"
 	"io/ioutil"
 	"net/http"
-	//"image/png"
 	"encoding/json"
 		"image"
 	_ "image/png"
 	_ "image/jpeg"
-	//"os"
-	"log"
+		"log"
 	"image/color"
 )
 
-type MosImage struct {
+type mosImage struct {
 	
 	Image *image.RGBA
 	AvgColor *color.RGBA
@@ -28,7 +22,7 @@ type MosImage struct {
 	Uses int
 }
 
-type FlickrPhoto struct{
+type flickrPhoto struct{
 	Id string `json:"id"`
 	Owner string `json:"owner"`
 	Secret string `json:"secret"`
@@ -38,32 +32,32 @@ type FlickrPhoto struct{
 	
 }
 
-func (p FlickrPhoto) downloadUrl() string {
+func (p flickrPhoto) downloadURL() string {
 		
 	return "https://farm"+strconv.Itoa(p.Farm)+".staticflickr.com/"+p.Server+"/"+p.Id+"_"+p.Secret+".jpg"
 	
 }
 
-type FlickrResponsePhotos struct{
+type flickrResponsePhotos struct{
 	
 	Page int `json:"page"`
 	Pages int `json:"pages"`
 	Perpage int `json:"perpage"`
 	Total string `json:"total"`
-	Photo []FlickrPhoto `json:"photo"`
+	Photo []flickrPhoto `json:"photo"`
 
 	
 }
 
-type FlickrResponse struct{
-	Photos FlickrResponsePhotos `json:"photos"`
+type flickrResponse struct{
+	Photos flickrResponsePhotos `json:"photos"`
 	Stat string `json:"stat"`
 	
 }
 
 func flickrSearch(count int, terms ...string) []string {
 	
-	var results []string = make([]string,0,count*len(terms))
+	results:= make([]string,0,count*len(terms))
 	
 	for _,term:=range terms {
 		uri:="https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=749dec8d6d00d4df46215bf86e704bb0&text="+term+ "&page=1&format=json&per_page="+strconv.Itoa(count) + "&content_type=1&sort=relevance"
@@ -73,7 +67,7 @@ func flickrSearch(count int, terms ...string) []string {
 		
 		j:=contents[14:rawlen-1]
 			
-		var f FlickrResponse
+		var f flickrResponse
 		err=json.Unmarshal(j,&f)
 		
 		if err!=nil{
@@ -81,7 +75,7 @@ func flickrSearch(count int, terms ...string) []string {
 		}
 		
 		for _,p:=range f.Photos.Photo {
-			results = append(results,p.downloadUrl())
+			results = append(results,p.downloadURL())
 			
 		}
 			
@@ -89,10 +83,10 @@ func flickrSearch(count int, terms ...string) []string {
 	return results
 }
 
-func downloadImages(urls []string) []MosImage {
+func downloadImages(urls []string) []mosImage {
 	
 	queue := make(chan string, 200)
-  results := make(chan ImageResponse, 200)
+  results := make(chan imageResponse, 200)
 	
 	for i := 0; i < 200; i++ {
     go worker(queue, results)
@@ -105,14 +99,14 @@ func downloadImages(urls []string) []MosImage {
 		close(queue)
 	}()
 	
-	var result ImageResponse
-	var images []MosImage
+	var result imageResponse
+	var images []mosImage
 	
 	for i := 0;i<len(urls);i++ {
 		result= <-results
 		
 		if result.Err == nil {
-			mi:=NewMosImage(result.Image)
+			mi:=newMosImage(result.Image)
 			images = append(images,mi)								
 		}		
 	}
@@ -121,7 +115,7 @@ func downloadImages(urls []string) []MosImage {
 	
 }
 
-func downloadanddecode(url string) (image.Image, error){
+func downloadAndDecode(url string) (image.Image, error){
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	
@@ -137,10 +131,10 @@ func downloadanddecode(url string) (image.Image, error){
 
 func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 	
-	var r_sum float64 =0
-	var g_sum float64 =0
-	var b_sum float64 =0
-	var count float64 =0
+	var rSum float64
+	var gSum float64
+	var bSum float64
+	var count float64
 	
 	pixels := img.Pix
 	
@@ -151,16 +145,16 @@ func averageColor(img *image.RGBA, rect image.Rectangle) color.RGBA {
 			offset:=4*(j*stride+i)
 			
 			
-			r_sum+= sRGBtoLinear(pixels[offset])
-			g_sum+= sRGBtoLinear(pixels[offset+1])
-			b_sum+= sRGBtoLinear(pixels[offset+2])
+			rSum+= sRGBtoLinear(pixels[offset])
+			gSum+= sRGBtoLinear(pixels[offset+1])
+			bSum+= sRGBtoLinear(pixels[offset+2])
 
 			count++
 			
 		}
 	}
 			
-	return color.RGBA{lineartosRGB(r_sum/count), lineartosRGB(g_sum/count), lineartosRGB(b_sum/count), 255}
+	return color.RGBA{lineartosRGB(rSum/count), lineartosRGB(gSum/count), lineartosRGB(bSum/count), 255}
 	
 }
 
@@ -246,9 +240,7 @@ func convertToRGBA(src image.Image) *image.RGBA {
 func convertImage(m image.Image) *image.RGBA {
 	
 	var rgba *image.RGBA
-	
-	//fmt.Println(reflect.TypeOf(m).String())
-		
+
 	switch m.(type) {
 	case *image.RGBA: 
 		rgba=m.(*image.RGBA)
@@ -260,16 +252,16 @@ func convertImage(m image.Image) *image.RGBA {
 }
 
 
-func NewMosImage(img image.Image) (MosImage) {
+func newMosImage(img image.Image) (mosImage) {
 	//TODO assert image >= 64x64
 	rgba := convertImage(img)
 	
-	var mi MosImage
+	var mi mosImage
 	
 	down:=downsample(rgba,image.Rect(0,0,64,64))
 	tile:=downsample(down,image.Rect(0,0,2,2))
 	
-	mi=MosImage{}
+	mi=mosImage{}
 	mi.Image=down
 	mi.Tile=tile
 	ac:=averageColor(down,down.Bounds())
